@@ -1,0 +1,68 @@
+{
+  "name": "spadblocker",
+  "version": "1.0.0",
+  "description": "Custom Spotify adblocker extension based on spicetify",
+  "type": "module",
+  "main": "src/spadblocker.js",
+  "exports": {
+    ".": {
+      "import": "./src/spadblocker.js",
+      "require": "./dist/spadblocker.cjs"
+    },
+    "./dist": "./dist/"
+  },
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "dev": "node scripts/dev.js",
+    "test": "node scripts/test.cjs",
+    "lint": "eslint src/**/*.js scripts/**/*.js --fix",
+    "format": "prettier --write src/**/*.js scripts/**/*.js",
+    "lint:check": "eslint src/**/*.js scripts/**/*.js",
+    "format:check": "prettier --check src/**/*.js scripts/**/*.js",
+    "security": "npm audit",
+    "size": "node scripts/analyze-bundle.cjs",
+    "precommit": "npm run lint:check && npm run format:check && npm test"
+  },
+  "keywords": [
+    "spotify",
+    "adblocker",
+    "spicetify",
+    "extension",
+    "premium",
+    "javascript",
+    "es2023"
+  ],
+  "author": "Spadblocker Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "@eslint/js": "^9.0.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.0",
+    "prettier": "^3.2.0",
+    "terser": "^5.27.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions",
+    "last 2 Edge versions"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keparlak/spadblocker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/keparlak/spadblocker/issues"
+  },
+  "homepage": "https://github.com/keparlak/spadblocker#readme",
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/keparlak"
+  }
+}
