@@ -1,6 +1,6 @@
 {
   "name": "spadblocker",
-  "version": "1.0.8",
+  "version": "1.1.1",
   "description": "Custom Spotify adblocker extension based on spicetify",
   "type": "module",
   "main": "src/spadblocker.js",

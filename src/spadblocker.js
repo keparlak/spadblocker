@@ -25,8 +25,504 @@
     maintenanceIntervalMs: 30000,
     premiumOverrideIntervalMs: 60000,
     useWeakRef: true,
-    enablePerformanceMonitoring: true
+    enablePerformanceMonitoring: true,
+    maxRetries: 3,
+    blockedScripts: [
+      'ad-',
+      'ads',
+      'advertisement',
+      'doubleclick',
+      'google_ad',
+      'googlesyndication'
+    ],
+    adSelectors: [
+      '[data-ad-type]',
+      '.ad-container',
+      '.ad-banner',
+      '.ad-overlay',
+      '.google-ad',
+      '.doubleclick',
+      '.hpto-ad',
+      '.sponsored-',
+      '[class*="ad-"]',
+      '[class*="ads-"]',
+      '[class*="advertisement"]',
+      '[id*="ad-"]',
+      '[id*="ads-"]',
+      '[id*="advertisement"]',
+      '[data-ad]',
+      '[data-ads]',
+      '[data-advertisement]',
+      'iframe[src*="ad"]',
+      'iframe[src*="doubleclick"]',
+      'iframe[src*="google"]',
+      'script[src*="ad"]',
+      'script[src*="doubleclick"]',
+      'script[src*="google"]'
+    ]
   };
+
+  // Load PatternValidator and initialize pattern validation
+  if (typeof window !== 'undefined') {
+    const validatorScript = document.createElement('script');
+    const patternValidatorCode = `
+      class PatternValidator {
+        #validationRules = new Map();
+        #errorTypes = {
+          INVALID_TYPE: 'INVALID_TYPE',
+          INVALID_SYNTAX: 'INVALID_SYNTAX',
+          INVALID_SELECTOR: 'INVALID_SELECTOR',
+          INVALID_PATTERN: 'INVALID_PATTERN',
+          DUPLICATE_PATTERN: 'DUPLICATE_PATTERN',
+          PATTERN_TOO_LONG: 'PATTERN_TOO_LONG',
+          INVALID_EFFECTIVENESS: 'INVALID_EFFECTIVENESS',
+          INVALID_SOURCE: 'INVALID_SOURCE'
+        };
+
+        constructor() {
+          this.#initializeValidationRules();
+        }
+
+        #initializeValidationRules() {
+          this.#validationRules.set('audio', {
+            requiredFields: ['id', 'type', 'pattern'],
+            optionalFields: ['selector', 'effectiveness', 'enabled', 'source'],
+            patternMaxLength: 100,
+            selectorMaxLength: 200,
+            allowedSources: ['default', 'user', 'community', 'import'],
+            effectivenessRange: { min: 0, max: 1 }
+          });
+
+          this.#validationRules.set('ui', {
+            requiredFields: ['id', 'type', 'pattern', 'selector'],
+            optionalFields: ['effectiveness', 'enabled', 'source'],
+            patternMaxLength: 100,
+            selectorMaxLength: 200,
+            allowedSources: ['default', 'user', 'community', 'import'],
+            effectivenessRange: { min: 0, max: 1 }
+          });
+
+          this.#validationRules.set('script', {
+            requiredFields: ['id', 'type', 'pattern'],
+            optionalFields: ['selector', 'effectiveness', 'enabled', 'source'],
+            patternMaxLength: 100,
+            selectorMaxLength: 200,
+            allowedSources: ['default', 'user', 'community', 'import'],
+            effectivenessRange: { min: 0, max: 1 }
+          });
+        }
+
+        validatePattern(pattern, existingPatterns = []) {
+          const errors = [];
+          const warnings = [];
+
+          if (!pattern || typeof pattern !== 'object') {
+            errors.push({
+              type: this.#errorTypes.INVALID_TYPE,
+              message: 'Pattern must be an object',
+              field: 'pattern'
+            });
+            return { valid: false, errors, warnings };
+          }
+
+          if (!pattern.type || !this.#validationRules.has(pattern.type)) {
+            errors.push({
+              type: this.#errorTypes.INVALID_TYPE,
+              message: 'Pattern type must be one of: ' + Array.from(this.#validationRules.keys()).join(', '),
+              field: 'type'
+            });
+          }
+
+          const rules = this.#validationRules.get(pattern.type);
+          if (!rules) {
+            return { valid: false, errors, warnings };
+          }
+
+          for (const field of rules.requiredFields) {
+            if (!pattern[field] || pattern[field] === '') {
+              errors.push({
+                type: this.#errorTypes.INVALID_PATTERN,
+                message: 'Required field \'' + field + '\' is missing or empty',
+                field
+              });
+            }
+          }
+
+          this.#validateFieldTypes(pattern, rules, errors, warnings);
+          this.#validatePatternSyntax(pattern, rules, errors, warnings);
+          
+          if (pattern.selector) {
+            this.#validateSelectorSyntax(pattern.selector, errors, warnings);
+          }
+
+          this.#checkForDuplicates(pattern, existingPatterns, errors, warnings);
+
+          if (pattern.effectiveness !== undefined) {
+            if (typeof pattern.effectiveness !== 'number' || 
+                pattern.effectiveness < rules.effectivenessRange.min || 
+                pattern.effectiveness > rules.effectivenessRange.max) {
+              errors.push({
+                type: this.#errorTypes.INVALID_EFFECTIVENESS,
+                message: 'Effectiveness must be a number between ' + rules.effectivenessRange.min + ' and ' + rules.effectivenessRange.max,
+                field: 'effectiveness'
+              });
+            }
+          }
+
+          return {
+            valid: errors.length === 0,
+            errors,
+            warnings
+          };
+        }
+
+        #validateFieldTypes(pattern, rules, errors, warnings) {
+          if (pattern.id !== undefined) {
+            if (typeof pattern.id !== 'string') {
+              errors.push({
+                type: this.#errorTypes.INVALID_TYPE,
+                message: 'ID must be a string',
+                field: 'id'
+              });
+            } else if (pattern.id.length > 50) {
+              errors.push({
+                type: this.#errorTypes.PATTERN_TOO_LONG,
+                message: 'ID must be 50 characters or less',
+                field: 'id'
+              });
+            }
+          }
+
+          if (pattern.pattern !== undefined) {
+            if (typeof pattern.pattern !== 'string') {
+              errors.push({
+                type: this.#errorTypes.INVALID_TYPE,
+                message: 'Pattern must be a string',
+                field: 'pattern'
+              });
+            } else if (pattern.pattern.length > rules.patternMaxLength) {
+              errors.push({
+                type: this.#errorTypes.PATTERN_TOO_LONG,
+                message: 'Pattern must be ' + rules.patternMaxLength + ' characters or less',
+                field: 'pattern'
+              });
+            }
+          }
+
+          if (pattern.selector !== undefined) {
+            if (typeof pattern.selector !== 'string') {
+              errors.push({
+                type: this.#errorTypes.INVALID_TYPE,
+                message: 'Selector must be a string',
+                field: 'selector'
+              });
+            } else if (pattern.selector.length > rules.selectorMaxLength) {
+              errors.push({
+                type: this.#errorTypes.PATTERN_TOO_LONG,
+                message: 'Selector must be ' + rules.selectorMaxLength + ' characters or less',
+                field: 'selector'
+              });
+            }
+          }
+
+          if (pattern.source !== undefined) {
+            if (!rules.allowedSources.includes(pattern.source)) {
+              errors.push({
+                type: this.#errorTypes.INVALID_SOURCE,
+                message: 'Source must be one of: ' + rules.allowedSources.join(', '),
+                field: 'source'
+              });
+            }
+          }
+
+          if (pattern.enabled !== undefined && typeof pattern.enabled !== 'boolean') {
+            errors.push({
+              type: this.#errorTypes.INVALID_TYPE,
+              message: 'Enabled must be a boolean',
+              field: 'enabled'
+            });
+          }
+        }
+
+        #validatePatternSyntax(pattern, rules, errors, warnings) {
+          if (!pattern.pattern) return;
+
+          const patternStr = pattern.pattern;
+
+          switch (pattern.type) {
+            case 'audio':
+              this.#validateAudioPattern(patternStr, errors, warnings);
+              break;
+            case 'ui':
+              this.#validateUIPattern(patternStr, errors, warnings);
+              break;
+            case 'script':
+              this.#validateScriptPattern(patternStr, errors, warnings);
+              break;
+          }
+        }
+
+        #validateAudioPattern(pattern, errors, warnings) {
+          const audioIndicators = ['ad-', 'ads', 'advertisement', 'doubleclick', 'google'];
+          const hasValidIndicator = audioIndicators.some(indicator => pattern.includes(indicator));
+          
+          if (!hasValidIndicator) {
+            warnings.push({
+              type: 'WEAK_PATTERN',
+              message: 'Audio pattern may not contain common ad indicators',
+              field: 'pattern'
+            });
+          }
+
+          const dangerousPatterns = ['eval', 'function', 'javascript:', 'data:'];
+          if (dangerousPatterns.some(dangerous => pattern.toLowerCase().includes(dangerous))) {
+            errors.push({
+              type: this.#errorTypes.INVALID_SYNTAX,
+              message: 'Pattern contains potentially dangerous elements',
+              field: 'pattern'
+            });
+          }
+        }
+
+        #validateUIPattern(pattern, errors, warnings) {
+          if (pattern.includes('[') || pattern.includes(']') || pattern.includes('.')) {
+            try {
+              document.querySelector(pattern);
+            } catch (error) {
+              errors.push({
+                type: this.#errorTypes.INVALID_SELECTOR,
+                message: 'Invalid CSS selector syntax',
+                field: 'pattern'
+              });
+            }
+          }
+        }
+
+        #validateScriptPattern(pattern, errors, warnings) {
+          const scriptIndicators = ['.js', 'script', 'src='];
+          const hasValidIndicator = scriptIndicators.some(indicator => pattern.includes(indicator));
+          
+          if (!hasValidIndicator) {
+            warnings.push({
+              type: 'WEAK_PATTERN',
+              message: 'Script pattern may not target script elements',
+              field: 'pattern'
+            });
+          }
+        }
+
+        #validateSelectorSyntax(selector, errors, warnings) {
+          try {
+            document.querySelector(selector);
+          } catch (error) {
+            errors.push({
+              type: this.#errorTypes.INVALID_SELECTOR,
+              message: 'Invalid CSS selector: ' + error.message,
+              field: 'selector'
+            });
+          }
+        }
+
+        #checkForDuplicates(pattern, existingPatterns, errors, warnings) {
+          if (!pattern.id || !Array.isArray(existingPatterns)) return;
+
+          const duplicate = existingPatterns.find(existing => 
+            existing.id === pattern.id && existing.id !== pattern.id
+          );
+
+          if (duplicate) {
+            errors.push({
+              type: this.#errorTypes.DUPLICATE_PATTERN,
+              message: 'Pattern with ID \'' + pattern.id + '\' already exists',
+              field: 'id'
+            });
+          }
+
+          const similar = existingPatterns.find(existing => 
+            existing.pattern === pattern.pattern && existing.id !== pattern.id
+          );
+
+          if (similar) {
+            warnings.push({
+              type: 'SIMILAR_PATTERN',
+              message: 'Similar pattern already exists with ID \'' + similar.id + '\'',
+              field: 'pattern'
+            });
+          }
+        }
+
+        sanitizePattern(pattern) {
+          const sanitized = { ...pattern };
+
+          if (sanitized.id && typeof sanitized.id === 'string') {
+            sanitized.id = sanitized.id.trim();
+          }
+
+          if (sanitized.pattern && typeof sanitized.pattern === 'string') {
+            sanitized.pattern = sanitized.pattern.trim();
+          }
+
+          if (sanitized.selector && typeof sanitized.selector === 'string') {
+            sanitized.selector = sanitized.selector.trim();
+          }
+
+          if (sanitized.effectiveness === undefined) {
+            sanitized.effectiveness = 0.5;
+          }
+
+          if (sanitized.enabled === undefined) {
+            sanitized.enabled = true;
+          }
+
+          if (sanitized.source === undefined) {
+            sanitized.source = 'user';
+          }
+
+          return sanitized;
+        }
+      }
+    `;
+
+    try {
+      validatorScript.textContent = patternValidatorCode;
+      document.head.appendChild(validatorScript);
+    } catch (error) {
+      console.error('Spadblocker: Failed to load PatternValidator:', error);
+    }
+  }
+
+  // Load PatternStorage and initialize pattern management
+  if (typeof window !== 'undefined' && typeof btoa !== 'undefined') {
+    const script = document.createElement('script');
+    const patternStorageCode = `
+      class PatternStorage {
+        #storageKey = 'spadblocker_patterns';
+        #patterns = new Map();
+        #maxPatterns = 1000;
+        #version = '1.0.0';
+
+        constructor() {
+          this.#loadPatterns();
+        }
+
+        #loadPatterns() {
+          try {
+            const stored = localStorage.getItem(this.#storageKey);
+            if (stored) {
+              const data = JSON.parse(stored);
+              if (data.version === this.#version && data.patterns) {
+                this.#patterns = new Map(data.patterns);
+                console.log('Spadblocker: Loaded patterns from storage');
+                return;
+              }
+            }
+            this.#initializeDefaultPatterns();
+          } catch (error) {
+            console.error('Spadblocker: Failed to load patterns:', error);
+            this.#initializeDefaultPatterns();
+          }
+        }
+
+        addPattern(pattern) {
+          const validation = this.#validatePattern(pattern);
+          if (!validation.valid) {
+            throw new Error('Invalid pattern: ' + validation.errors.join(', '));
+          }
+          if (this.#patterns.has(pattern.id)) {
+            throw new Error('Pattern with ID ' + pattern.id + ' already exists');
+          }
+          if (this.#patterns.size >= this.#maxPatterns) {
+            throw new Error('Maximum pattern limit reached');
+          }
+          const newPattern = {
+            ...pattern,
+            effectiveness: pattern.effectiveness || 0.5,
+            createdAt: Date.now(),
+            enabled: pattern.enabled !== false
+          };
+          this.#patterns.set(pattern.id, newPattern);
+          this.#savePatterns();
+          return newPattern;
+        }
+
+        #validatePattern(pattern) {
+          const errors = [];
+          if (!pattern.id || typeof pattern.id !== 'string') {
+            errors.push('Pattern must have a valid string ID');
+          }
+          if (!pattern.type || !['audio', 'ui', 'script'].includes(pattern.type)) {
+            errors.push('Pattern must have a valid type');
+          }
+          return { valid: errors.length === 0, errors };
+        }
+
+        #savePatterns() {
+          try {
+            const data = {
+              version: this.#version,
+              patterns: Array.from(this.#patterns.entries()),
+              lastUpdated: Date.now()
+            };
+            localStorage.setItem(this.#storageKey, JSON.stringify(data));
+          } catch (error) {
+            console.error('Spadblocker: Failed to save patterns:', error);
+          }
+        }
+
+        getEnabledPatterns() {
+          return Array.from(this.#patterns.values()).filter(p => p.enabled !== false);
+        }
+      }
+    `;
+
+    try {
+      script.textContent = patternStorageCode;
+      document.head.appendChild(script);
+    } catch (error) {
+      console.error('Spadblocker: Failed to load PatternStorage:', error);
+    }
+  }
+
+  // Simple configuration validation
+  function validateConfig() {
+    const errors = [];
+    const warnings = [];
+
+    // Basic validation for key properties
+    const requiredProps = ['blockAudioAds', 'blockUIAds', 'enablePremiumFeatures'];
+    for (const prop of requiredProps) {
+      if (CONFIG[prop] !== undefined && typeof CONFIG[prop] !== 'boolean') {
+        errors.push(`${prop}: Expected boolean, got ${typeof CONFIG[prop]}`);
+      }
+    }
+
+    // Validate numeric properties
+    if (CONFIG.maintenanceIntervalMs !== undefined) {
+      if (typeof CONFIG.maintenanceIntervalMs !== 'number' || CONFIG.maintenanceIntervalMs < 1000) {
+        errors.push(`maintenanceIntervalMs: Must be number >= 1000, got ${CONFIG.maintenanceIntervalMs}`);
+      }
+    }
+
+    if (CONFIG.maxRetries !== undefined) {
+      if (typeof CONFIG.maxRetries !== 'number' || CONFIG.maxRetries < 1 || CONFIG.maxRetries > 10) {
+        errors.push(`maxRetries: Must be number between 1-10, got ${CONFIG.maxRetries}`);
+      }
+    }
+
+    // Log validation results
+    if (errors.length > 0) {
+      console.error('Spadblocker: Configuration validation failed:', errors);
+    }
+
+    if (warnings.length > 0) {
+      console.warn('Spadblocker: Configuration warnings:', warnings);
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  // Validate configuration on load
+  validateConfig();
 
   /**
    * Performance Monitor
