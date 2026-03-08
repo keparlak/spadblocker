@@ -1,6 +1,6 @@
 {
   "name": "spadblocker",
-  "version": "1.0.2",
+  "version": "1.0.8",
   "description": "Custom Spotify adblocker extension based on spicetify",
   "type": "module",
   "main": "src/spadblocker.js",
@@ -17,6 +17,9 @@
     "version:deploy": "node scripts/version.cjs deploy",
     "dev": "node scripts/dev.js",
     "test": "node scripts/test.cjs",
+    "test:unit": "node scripts/jest-runner.cjs unit",
+    "test:watch": "node scripts/jest-runner.cjs watch",
+    "test:coverage": "node scripts/jest-runner.cjs coverage",
     "lint": "eslint src/**/*.js scripts/**/*.js --fix",
     "format": "prettier --write src/**/*.js scripts/**/*.js",
     "lint:check": "eslint src/**/*.js scripts/**/*.js",

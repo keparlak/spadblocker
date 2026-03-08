@@ -27,6 +27,9 @@ export default [
         PerformanceObserver: 'readonly',
         AbortController: 'readonly',
         Symbol: 'readonly',
+        HTMLScriptElement: 'readonly',
+        Response: 'readonly',
+        global: 'readonly',
         // Spotify/Spicetify globals
         Spicetify: 'readonly',
         AudioAdBlocker: 'readonly',
@@ -103,6 +106,63 @@ export default [
           extensions: ['.js', '.json', '.mjs']
         }
       }
+    }
+  },
+  {
+    files: ['src/setupTests.js', 'src/**/*.test.js', 'test/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'commonjs',
+      globals: {
+        // Jest globals
+        jest: 'readonly',
+        describe: 'readonly',
+        test: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        // Node.js globals
+        require: 'readonly',
+        module: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearTimeout: 'readonly',
+        clearInterval: 'readonly',
+        performance: 'readonly',
+        AbortController: 'readonly',
+        Symbol: 'readonly',
+        // Browser globals for testing
+        global: 'readonly',
+        window: 'readonly',
+        document: 'readonly',
+        HTMLScriptElement: 'readonly',
+        Response: 'readonly',
+        MutationObserver: 'readonly',
+        IntersectionObserver: 'readonly',
+        WeakRef: 'readonly',
+        FinalizationRegistry: 'readonly',
+        localStorage: 'readonly'
+      }
+    },
+    rules: {
+      // Allow more console statements in tests
+      'no-console': 'off',
+      // Allow unused vars in tests
+      'no-unused-vars': ['warn', { 
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_'
+      }],
+      // Allow module exports in tests
+      'no-var': 'off'
     }
   },
   {

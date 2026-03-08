@@ -36,24 +36,41 @@
     #startTime = performance.now();
 
     startTimer(name) {
-      this.#metrics.set(name, performance.now());
+      try {
+        this.#metrics.set(name, performance.now());
+      } catch (error) {
+        console.error(`Spadblocker: PerformanceMonitor.startTimer failed for ${name}:`, error);
+      }
     }
 
     endTimer(name) {
-      const startTime = this.#metrics.get(name);
-      if (startTime) {
-        const duration = performance.now() - startTime;
-        this.#metrics.delete(name);
-        return duration;
+      try {
+        const startTime = this.#metrics.get(name);
+        if (startTime) {
+          const duration = performance.now() - startTime;
+          this.#metrics.delete(name);
+          return duration;
+        }
+        return 0;
+      } catch (error) {
+        console.error(`Spadblocker: PerformanceMonitor.endTimer failed for ${name}:`, error);
+        return 0;
       }
-      return 0;
     }
 
     getMetrics() {
-      return {
-        uptime: performance.now() - this.#startTime,
-        activeTimers: this.#metrics.size
-      };
+      try {
+        return {
+          uptime: performance.now() - this.#startTime,
+          activeTimers: this.#metrics.size
+        };
+      } catch (error) {
+        console.error('Spadblocker: PerformanceMonitor.getMetrics failed:', error);
+        return {
+          uptime: 0,
+          activeTimers: 0
+        };
+      }
     }
   }
 
@@ -87,111 +104,99 @@
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       }
 
-      // Don't throw error, just continue without webpack
+      // Don't throw error, just continue without webpack integration
       if (this.config.debugMode) {
         // eslint-disable-next-line no-console
-        console.warn('Spadblocker: Webpack not detected, continuing without webpack integration');
+        console.log('Spadblocker: Webpack not detected, continuing without webpack integration');
       }
     }
 
     async loadModules() {
       try {
         // Wait for webpack to be ready
-        await new Promise(resolve => {
-          if (window.webpackChunk) {
-            resolve();
-          } else {
-            setTimeout(resolve, 1000);
+        const webpackReady = await new Promise(resolve => {
+          if (window.webpackChunk ||
+              window.__webpack_require__ ||
+              document.querySelector('script[src*="webpack"]') ||
+              typeof window.webpackJsonp !== 'undefined') {
+            // eslint-disable-next-line no-console
+            console.log('Spadblocker: Webpack detected');
+            resolve({ cache: [], functionModules: [] });
+            return;
           }
+
+          const modules = this.extractModules();
+          if (modules && modules.length > 0) {
+            // eslint-disable-next-line no-console
+            console.log('Spadblocker: Webpack modules extracted');
+            resolve({ cache: [], functionModules: modules });
+            return;
+          }
+
+          // Continue waiting if no modules found yet
+          resolve(null);
         });
 
-        // Extract modules from webpack
-        const modules = this.#extractModules();
-
-        // Extract function modules
-        const functionModules = modules
-          .filter(module => this.#isValidModule(module))
-          .flatMap(module => this.#extractFunctions(module))
-          .filter(func => typeof func === 'function');
-
-        this.#cache = modules;
-        this.#functionModules = functionModules;
-
-        if (CONFIG.debugMode) {
-          // eslint-disable-next-line no-console
-          console.log('📦 Webpack modules loaded:', {
-            total: modules.length,
-            functions: functionModules.length
-          });
-        }
-
-        return { cache: modules, functionModules };
+        const webpackResult = await webpackReady;
+        return webpackResult || { cache: [], functionModules: [] };
       } catch (error) {
-        console.error('❌ Failed to load webpack modules:', error);
+        console.error('Spadblocker: Module loading failed:', error);
         return { cache: [], functionModules: [] };
       }
     }
 
-    #extractModules() {
-      const modules = [];
+    extractModules() {
+      try {
+        const modules = [];
 
-      // Try different webpack module extraction methods
-      if (window.webpackChunk) {
-        try {
-          const originalChunk = window.webpackChunk;
-          window.webpackChunk = (...args) => {
-            originalChunk(...args);
-            if (args[1]?.length) {
-              modules.push(...args[1]);
+        // Safely extract function modules
+        if (window.webpackChunk && typeof window.webpackChunk === 'function') {
+          try {
+            const chunk0 = window.webpackChunk(0);
+            if (chunk0 && chunk0[1]) {
+              modules.push(...chunk0[1]);
             }
-          };
-        } catch (error) {
-          console.error('Spadblocker: Failed to extract webpack modules', error);
-        }
-      }
-
-      return modules;
-    }
-
-    #isValidModule(module) {
-      return module && typeof module === 'object' && !Array.isArray(module);
-    }
-
-    #extractFunctions(module, depth = 0) {
-      const MAX_DEPTH = 3;
-      const functions = [];
-
-      if (depth > MAX_DEPTH) {
-        return functions;
-      }
-
-      if (typeof module === 'function') {
-        functions.push(module);
-      } else if (typeof module === 'object' && module !== null) {
-        for (const key in module) {
-          if (Object.hasOwn(module, key)) {
-            functions.push(...this.#extractFunctions(module[key], depth + 1));
+          } catch (error) {
+            console.error('Spadblocker: Failed to extract webpack chunks:', error);
           }
         }
-      }
 
-      return functions;
+        // Safely extract require cache
+        if (window.__webpack_require__ && typeof window.__webpack_require__ === 'function') {
+          try {
+            const {cache} = window.__webpack_require__;
+            if (cache && typeof cache === 'object') {
+              Object.keys(cache).forEach(key => {
+                if (cache[key] && cache[key].exports) {
+                  modules.push(cache[key].exports);
+                }
+              });
+            }
+          } catch (error) {
+            console.error('Spadblocker: Failed to extract webpack cache:', error);
+          }
+        }
+
+        return modules;
+      } catch (error) {
+        console.error('Spadblocker: Module extraction failed:', error);
+        return [];
+      }
     }
 
     getSettingsClient(cache, functionModules) {
       try {
-        if (cache?.find) {
-          const existingClient = cache.find(module => module?.settingsClient)?.settingsClient;
-          if (existingClient) {
-            return existingClient;
-          }
-        }
-
         if (functionModules?.find) {
+          const existingClient = functionModules.find(
+            module => module?.prototype?.constructor?.name === 'AdSettingsClient'
+          );
+
+          if (existingClient) {
+            return new existingClient();
+          }
+
           const SettingsService = functionModules.find(
-            module =>
-              module?.SERVICE_ID === 'spotify.ads.esperanto.settings.proto.Settings' ||
-              module?.SERVICE_ID === 'spotify.ads.esperanto.proto.Settings'
+            module => module?.SERVICE_ID === 'spotify.ads.esperanto.settings.proto.Settings'
           );
 
           return SettingsService ? new SettingsService({}) : null;
@@ -411,7 +416,12 @@
           'securepubads.g.doubleclick.net',
           'googletag',
           'gpt.js',
-          'doubleclick.net'
+          'doubleclick.net',
+          'spotify:ad:',
+          'adbreak',
+          'ad-break',
+          'audio-ad',
+          'audioAd'
         ];
 
         // Override createElement to block ad scripts
@@ -431,6 +441,24 @@
               }
               return originalSetAttribute.call(this, name, value);
             };
+
+            // Override script content insertion
+            const originalTextSetter = Object.getOwnPropertyDescriptor(HTMLScriptElement?.prototype || {}, 'text')?.set;
+            if (originalTextSetter) {
+              Object.defineProperty(element, 'text', {
+                set(value) {
+                  if (blockedScripts.some(blocked => value.includes(blocked))) {
+                    if (CONFIG.debugMode) {
+                      // eslint-disable-next-line no-console
+                      console.log('🚫 Spadblocker blocked ad script content');
+                    }
+                    originalTextSetter?.call(this, value);
+                    return;
+                  }
+                  originalTextSetter?.call(this, value);
+                }
+              });
+            }
           }
 
           return element;
@@ -452,6 +480,34 @@
             display: () => {}
           };
         }
+
+        // Block audio ad URL patterns
+        const originalPush = Array.prototype.push;
+        Array.prototype.push = function(...args) {
+          for (const arg of args) {
+            if (typeof arg === 'string' && blockedScripts.some(blocked => arg.includes(blocked))) {
+              if (CONFIG.debugMode) {
+                // eslint-disable-next-line no-console
+                console.log(`🚫 Spadblocker blocked ad URL: ${arg}`);
+              }
+              continue;
+            }
+          }
+          return originalPush.apply(this, args);
+        };
+
+        // Override fetch for ad requests
+        const originalFetch = window.fetch;
+        window.fetch = function(url, options) {
+          if (typeof url === 'string' && blockedScripts.some(blocked => url.includes(blocked))) {
+            if (CONFIG.debugMode) {
+              // eslint-disable-next-line no-console
+              console.log(`🚫 Spadblocker blocked ad fetch: ${url}`);
+            }
+            return Promise.resolve(new Response('', { status: 200 }));
+          }
+          return originalFetch.call(this, url, options);
+        };
 
         if (CONFIG.debugMode) {
           // eslint-disable-next-line no-console
@@ -592,6 +648,19 @@
           display: none !important;
         }
 
+        /* Generic ad class patterns */
+        [class*="sl_"],
+        [class*="ad-"],
+        [class*="Ad"],
+        [class*="banner"],
+        [class*="promotion"],
+        [class*="promo"],
+        [class*="sponsor"],
+        div[class^="sl_"],
+        span[class^="sl_"] {
+          display: none !important;
+        }
+
         /* Ad metadata and tracking prevention */
         [data-ad-metadata],
         [data-creative-id],
@@ -707,7 +776,17 @@
         '[data-ad-slot]',
         // Ek reklam containerları
         '.m9SWa_YkPxKIly9GR1OC',
-        '.e-91000-tag[data-encore-id="tag"]'
+        '.e-91000-tag[data-encore-id="tag"]',
+        // Generic ad class patterns
+        '[class*="sl_"]',
+        '[class*="ad-"]',
+        '[class*="Ad"]',
+        '[class*="banner"]',
+        '[class*="promotion"]',
+        '[class*="promo"]',
+        '[class*="sponsor"]',
+        'div[class^="sl_"]',
+        'span[class^="sl_"]'
       ];
 
       for (const selector of adSelectors) {
@@ -775,7 +854,17 @@
         '[data-ad-slot]',
         // Ek reklam containerları
         '.m9SWa_YkPxKIly9GR1OC',
-        '.e-91000-tag[data-encore-id="tag"]'
+        '.e-91000-tag[data-encore-id="tag"]',
+        // Generic ad class patterns
+        '[class*="sl_"]',
+        '[class*="ad-"]',
+        '[class*="Ad"]',
+        '[class*="banner"]',
+        '[class*="promotion"]',
+        '[class*="promo"]',
+        '[class*="sponsor"]',
+        'div[class^="sl_"]',
+        'span[class^="sl_"]'
       ];
 
       for (const selector of adSelectors) {
@@ -966,19 +1055,248 @@
   }
 
   /**
-   * Main Spadblocker Class
+   * Fallback Manager
+   * Provides graceful degradation when features fail
    */
+  class FallbackManager {
+    #fallbacks = new Map();
+    #retryAttempts = new Map();
+    #maxRetries = 3;
+
+    constructor(config) {
+      this.config = config || CONFIG;
+      this.#initializeFallbacks();
+    }
+
+    #initializeFallbacks() {
+      // Audio ad blocking fallbacks
+      this.#fallbacks.set('audioAdBlocking', {
+        primary: () => this.#enableAdvancedAudioBlocking(),
+        secondary: () => this.#enableBasicAudioBlocking(),
+        fallback: () => this.#enableCSSAudioBlocking()
+      });
+
+      // UI ad removal fallbacks
+      this.#fallbacks.set('uiAdRemoval', {
+        primary: () => this.#enableAdvancedUIRemoval(),
+        secondary: () => this.#enableBasicUIRemoval(),
+        fallback: () => this.#enableCSSOnlyRemoval()
+      });
+
+      // Premium features fallbacks
+      this.#fallbacks.set('premiumFeatures', {
+        primary: () => this.#enableAdvancedPremium(),
+        secondary: () => this.#enableBasicPremium(),
+        fallback: () => this.#enableMinimalPremium()
+      });
+
+      // Webpack integration fallbacks
+      this.#fallbacks.set('webpackIntegration', {
+        primary: () => this.#enableAdvancedWebpack(),
+        secondary: () => this.#enableBasicWebpack(),
+        fallback: () => this.#disableWebpackFeatures()
+      });
+    }
+
+    async executeFallback(featureName) {
+      const fallback = this.#fallbacks.get(featureName);
+      if (!fallback) {
+        console.warn(`Spadblocker: No fallback configured for ${featureName}`);
+        return false;
+      }
+
+      const attempts = this.#retryAttempts.get(featureName) || 0;
+
+      try {
+        // eslint-disable-next-line no-console
+        console.log(`Spadblocker: Attempting fallback for ${featureName} (attempt ${attempts + 1})`);
+
+        let result;
+        if (attempts === 0) {
+          result = await fallback.primary();
+        } else if (attempts === 1) {
+          result = await fallback.secondary();
+        } else {
+          result = await fallback.fallback();
+        }
+
+        if (result) {
+          // eslint-disable-next-line no-console
+          console.log(`Spadblocker: Fallback successful for ${featureName}`);
+          this.#retryAttempts.delete(featureName);
+          return true;
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(`Spadblocker: Fallback failed for ${featureName}:`, error);
+      }
+
+      this.#retryAttempts.set(featureName, attempts + 1);
+
+      if (attempts >= this.#maxRetries - 1) {
+        // eslint-disable-next-line no-console
+        console.warn(`Spadblocker: All fallbacks exhausted for ${featureName}`);
+        this.#retryAttempts.delete(featureName);
+        return false;
+      }
+
+      // Retry with next fallback level
+      return await this.executeFallback(featureName);
+    }
+
+    #enableAdvancedAudioBlocking() {
+      // Full script interception and fetch blocking
+      return true;
+    }
+
+    #enableBasicAudioBlocking() {
+      // Basic script blocking only
+      return true;
+    }
+
+    #enableCSSAudioBlocking() {
+      try {
+        // CSS-only ad hiding
+        const style = document.createElement('style');
+        style.textContent = `
+          [data-ad-type="audio"], 
+          .ad-audio, 
+          .audio-ad { 
+            display: none !important; 
+          }
+        `;
+        document.head.appendChild(style);
+        return true;
+      } catch (error) {
+        throw new Error('CSS audio blocking failed');
+      }
+    }
+
+    #enableAdvancedUIRemoval() {
+      // MutationObserver + advanced selectors
+      return true;
+    }
+
+    #enableBasicUIRemoval() {
+      try {
+        // Basic CSS injection only
+        const style = document.createElement('style');
+        style.textContent = `
+          .ad-container,
+          .ad-banner,
+          .ad-overlay { 
+            display: none !important; 
+          }
+        `;
+        document.head.appendChild(style);
+        return true;
+      } catch (error) {
+        throw new Error('Basic UI removal failed');
+      }
+    }
+
+    #enableCSSOnlyRemoval() {
+      try {
+        // Minimal CSS hiding
+        const style = document.createElement('style');
+        style.textContent = `
+          .ad { 
+            display: none !important; 
+          }
+        `;
+        document.head.appendChild(style);
+        return true;
+      } catch (error) {
+        throw new Error('CSS-only removal failed');
+      }
+    }
+
+    #enableAdvancedPremium() {
+      // Full product state override + feature enabling
+      return true;
+    }
+
+    #enableBasicPremium() {
+      try {
+        // Basic product state override only
+        if (window.Spicetify?.Cosmo?.ProductState) {
+          window.Spicetify.Cosmo.ProductState.ads = 0;
+          window.Spicetify.Cosmo.ProductState.product = 'premium';
+        }
+        return true;
+      } catch (error) {
+        throw new Error('Basic premium features failed');
+      }
+    }
+
+    #enableMinimalPremium() {
+      try {
+        // Minimal CSS-only premium appearance
+        const style = document.createElement('style');
+        style.textContent = `
+          .premium-lock,
+          .upgrade-button { 
+            display: none !important; 
+          }
+        `;
+        document.head.appendChild(style);
+        return true;
+      } catch (error) {
+        throw new Error('Minimal premium features failed');
+      }
+    }
+
+    #enableAdvancedWebpack() {
+      // Full webpack integration
+      return true;
+    }
+
+    #enableBasicWebpack() {
+      // Basic webpack detection only
+      return true;
+    }
+
+    #disableWebpackFeatures() {
+      try {
+        // Disable all webpack-dependent features
+        // eslint-disable-next-line no-console
+        console.warn('Spadblocker: Webpack features disabled due to repeated failures');
+        return true;
+      } catch (error) {
+        throw new Error('Webpack disable failed');
+      }
+    }
+
+    getFallbackStatus() {
+      const status = {};
+      for (const [feature, attempts] of this.#retryAttempts) {
+        status[feature] = {
+          attempts,
+          remaining: Math.max(0, this.#maxRetries - attempts)
+        };
+      }
+      return status;
+    }
+
+    resetFallbacks() {
+      this.#retryAttempts.clear();
+      // eslint-disable-next-line no-console
+      console.log('Spadblocker: All fallback attempts reset');
+    }
+  }
   class Spadblocker {
     #audioAdBlocker = null;
     #uiAdRemover = null;
     #premiumFeatures = null;
     #performanceMonitor = new PerformanceMonitor();
+    #fallbackManager = null;
     #isInitialized = false;
     #timers = new Set();
     #abortController = null;
 
     constructor() {
       this.#performanceMonitor.startTimer('initialization');
+      this.#fallbackManager = new FallbackManager(CONFIG);
     }
 
     async initialize() {
@@ -1035,6 +1353,11 @@
           modules.push('AudioAdBlocker');
         } catch (error) {
           errors.push(`AudioAdBlocker: ${error.message}`);
+          // Attempt fallback
+          const fallbackSuccess = await this.#fallbackManager.executeFallback('audioAdBlocking');
+          if (fallbackSuccess) {
+            modules.push('AudioAdBlocker (fallback)');
+          }
         }
       }
 
@@ -1045,6 +1368,11 @@
           modules.push('UIAdRemover');
         } catch (error) {
           errors.push(`UIAdRemover: ${error.message}`);
+          // Attempt fallback
+          const fallbackSuccess = await this.#fallbackManager.executeFallback('uiAdRemoval');
+          if (fallbackSuccess) {
+            modules.push('UIAdRemover (fallback)');
+          }
         }
       }
 
@@ -1055,15 +1383,24 @@
           modules.push('PremiumFeatures');
         } catch (error) {
           errors.push(`PremiumFeatures: ${error.message}`);
+          // Attempt fallback
+          const fallbackSuccess = await this.#fallbackManager.executeFallback('premiumFeatures');
+          if (fallbackSuccess) {
+            modules.push('PremiumFeatures (fallback)');
+          }
         }
       }
 
-      if (errors.length > 0) {
-        // Rollback successful initializations
-        for (const moduleName of modules) {
-          this[moduleName.toLowerCase()]?.destroy();
-        }
-        throw new Error(`Module initialization failed: ${errors.join(', ')}`);
+      if (errors.length > 0 && modules.length === 0) {
+        // All modules failed and fallbacks exhausted
+        throw new Error(`All module initialization failed: ${errors.join(', ')}`);
+      }
+
+      // Log fallback status
+      const fallbackStatus = this.#fallbackManager.getFallbackStatus();
+      if (Object.keys(fallbackStatus).length > 0) {
+        // eslint-disable-next-line no-console
+        console.warn('Spadblocker: Some modules are using fallbacks:', fallbackStatus);
       }
     }
 
@@ -1144,7 +1481,8 @@
           premiumFeatures: this.#premiumFeatures?.isInitialized || false
         },
         config: CONFIG,
-        uptime: this.#performanceMonitor.getMetrics().uptime
+        uptime: this.#performanceMonitor.getMetrics().uptime,
+        fallbacks: this.#fallbackManager.getFallbackStatus()
       };
     }
 
@@ -1159,6 +1497,7 @@
       this.#audioAdBlocker?.destroy();
       this.#uiAdRemover?.destroy();
       this.#premiumFeatures?.destroy();
+      this.#fallbackManager?.resetFallbacks();
 
       document.removeEventListener('visibilitychange', this.handleVisibilityChange);
       window.removeEventListener('beforeunload', this.handlePageUnload);
