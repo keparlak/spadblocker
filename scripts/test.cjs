@@ -63,10 +63,7 @@ function validateStructure(filePath) {
     const content = fs.readFileSync(filePath, 'utf8');
 
     const requiredItems = {
-      'audio-ad-blocker.js': ['class AudioAdBlocker', 'initialize', 'configureAdManagers'],
-      'ui-ad-remover.js': ['class UIAdRemover', 'initialize', 'injectAdBlockingCSS'],
-      'premium-features.js': ['class PremiumFeatures', 'initialize', 'overrideProductState'],
-      'spadblocker.js': ['class Spadblocker', 'initialize', 'CONFIG']
+      'spadblocker.js': ['class Spadblocker', 'initialize', 'CONFIG', 'AudioAdBlocker', 'UIAdRemover', 'PremiumFeatures']
     };
 
     const filename = path.basename(filePath);
@@ -103,9 +100,6 @@ function runTests() {
   test('Source directory exists', () => fileExists(SRC_DIR));
 
   const sourceFiles = [
-    'audio-ad-blocker.js',
-    'ui-ad-remover.js',
-    'premium-features.js',
     'spadblocker.js'
   ];
 
@@ -166,9 +160,6 @@ function runLinting() {
   console.log('\n🔍 Running basic linting...');
 
   const sourceFiles = [
-    'audio-ad-blocker.js',
-    'ui-ad-remover.js',
-    'premium-features.js',
     'spadblocker.js'
   ];
 
