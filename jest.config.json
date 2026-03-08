@@ -1,0 +1,31 @@
+{
+  "testEnvironment": "jsdom",
+  "setupFilesAfterEnv": ["<rootDir>/src/setupTests.js"],
+  "testMatch": [
+    "**/test/**/*.test.js",
+    "**/src/**/*.test.js"
+  ],
+  "collectCoverageFrom": [
+    "src/**/*.js"
+  ],
+  "coverageDirectory": "coverage",
+  "coverageReporters": [
+    "text",
+    "lcov",
+    "html"
+  ],
+  "projects": [
+    {
+      "displayName": "Spadblocker Core",
+      "testMatch": [
+        "<rootDir>/src/**/class*.test.js"
+      ]
+    },
+    {
+      "displayName": "Spadblocker Integration", 
+      "testMatch": [
+        "<rootDir>/test/**/*.integration.test.js"
+      ]
+    }
+  ]
+}
