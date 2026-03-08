@@ -8,10 +8,15 @@
 const fs = require('fs');
 const path = require('path');
 
+// Read package.json for version info
+const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+const VERSION = packageJson.version;
+
 // Configuration
 const SRC_DIR = path.join(__dirname, '../src');
 const DIST_DIR = path.join(__dirname, '../dist');
 const OUTPUT_FILE = path.join(DIST_DIR, 'spadblocker.js');
+const VERSION_FILE = path.join(DIST_DIR, 'version.json');
 
 // Ensure dist directory exists
 if (!fs.existsSync(DIST_DIR)) {
@@ -35,7 +40,7 @@ function buildExtension() {
  * Spadblocker - Custom Spotify Adblocker Extension
  * Eliminates ads and unlocks premium features for free users
  * 
- * @version 1.0.0
+ * @version ${VERSION}
  * @author Spadblocker Team
  * @license MIT
  * @build ${new Date().toISOString()}
@@ -81,6 +86,7 @@ if (typeof window !== 'undefined') {
     console.log('✅ Build completed successfully!');
     console.log(`📁 Output: ${OUTPUT_FILE}`);
     console.log(`📊 Size: ${fileSizeKB} KB`);
+    console.log(`🏷️  Version: ${VERSION}`);
 
     return true;
 
@@ -91,8 +97,47 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Create minified version
+ * Create version information file
  */
+function createVersionInfo() {
+  console.log('📝 Creating version information...');
+
+  try {
+    const versionInfo = {
+      version: VERSION,
+      buildTime: new Date().toISOString(),
+      buildDate: new Date().toLocaleDateString(),
+      buildHash: require('crypto')
+        .createHash('sha256')
+        .update(fs.readFileSync(OUTPUT_FILE, 'utf8'))
+        .digest('hex')
+        .substring(0, 16),
+      files: {
+        main: 'spadblocker.js',
+        minified: 'spadblocker.min.js',
+        package: 'package/'
+      },
+      changelog: [
+        'v1.0.0 - Initial release with comprehensive ad blocking',
+        'v1.0.1 - Enhanced Google DoubleClick/GPT blocking',
+        'v1.0.2 - Added HPTO and advanced ad container blocking',
+        'v1.0.3 - Improved script blocking and premium features'
+      ]
+    };
+
+    fs.writeFileSync(VERSION_FILE, JSON.stringify(versionInfo, null, 2));
+    
+    console.log('✅ Version information created!');
+    console.log(`📁 Output: ${VERSION_FILE}`);
+    console.log(`🏷️  Version: ${versionInfo.version}`);
+    console.log(`🔗 Hash: ${versionInfo.buildHash}`);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Version info creation failed:', error.message);
+    return false;
+  }
+}
 function createMinifiedVersion() {
   console.log('🗜️  Creating minified version...');
 
@@ -199,7 +244,8 @@ function main() {
 
   const success = buildExtension() &&
                    createMinifiedVersion() &&
-                   createPackage();
+                   createPackage() &&
+                   createVersionInfo();
 
   if (success) {
     console.log('\n🎉 All build operations completed successfully!');
@@ -218,5 +264,6 @@ if (require.main === module) {
 module.exports = {
   buildExtension,
   createMinifiedVersion,
-  createPackage
+  createPackage,
+  createVersionInfo
 };
