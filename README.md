@@ -10,6 +10,9 @@ Modern Spotify adblocker extension with ES2023+ features that eliminates ads and
 - 🚀 **Modern Architecture** - Built with ES2023+ features and performance monitoring
 - 📦 **Version Management** - Automatic version tracking and deployment system
 - 🛡️ **Advanced Protection** - Blocks Google DoubleClick, HPTO, and generic ad patterns
+- 🎯 **Pattern Manager** - User-friendly interface for adding custom ad blocking patterns
+- 🔍 **Pattern Validation** - Real-time validation and security checks for user patterns
+- 💾 **Pattern Storage** - Persistent storage for user-submitted patterns
 
 ## Installation
 
@@ -212,7 +215,102 @@ const CONFIG = {
 };
 ```
 
+## Using the Pattern Manager
+
+### Accessing the Interface
+
+The Pattern Manager can be accessed via the **🎯 button** in the top-right corner of Spotify. Click this button to open the pattern management interface.
+
+### Adding New Patterns
+
+1. **Click the 🎯 button** to open the Pattern Manager
+2. **Fill in the form**:
+   - **Pattern ID**: Unique identifier (e.g., `custom-audio-ad-1`)
+   - **Type**: Choose from Audio Ad, UI Ad, or Script
+   - **Pattern**: The pattern to match (e.g., `ad-`, `.ad-container`)
+   - **CSS Selector** (UI patterns only): CSS selector to target (optional)
+   - **Effectiveness**: 0.0-1.0 rating (how well the pattern works)
+3. **Click "Add Pattern"** to submit
+
+### Managing Patterns
+
+The Pattern Manager shows all existing patterns with:
+- **Pattern ID** and **type**
+- **Pattern string** and **effectiveness**
+- **Enable/Disable** toggle buttons
+- **Delete** button for removal
+
+### Pattern Types
+
+- **Audio Ad**: Targets audio ad scripts and URLs
+- **UI Ad**: Targets visual ad elements with CSS selectors
+- **Script**: Blocks script loading and execution
+
+### Best Practices
+
+- **Be Specific**: Use precise patterns for better blocking
+- **Test Effectiveness**: Monitor pattern success rate
+- **Avoid Overly Broad**: Don't block legitimate content
+- **Regular Updates**: Update patterns as Spotify changes
+
+### Pattern Examples
+
+```javascript
+// Audio ad pattern
+{
+  id: "audio-ad-blocker-v2",
+  type: "audio",
+  pattern: "ad-",
+  effectiveness: 0.9
+}
+
+// UI ad pattern
+{
+  id: "ui-banner-remover",
+  type: "ui",
+  pattern: ".ad-banner",
+  selector: ".ad-banner",
+  effectiveness: 0.85
+}
+
+// Script pattern
+{
+  id: "script-blocker",
+  type: "script",
+  pattern: "doubleclick",
+  effectiveness: 0.95
+}
+```
+
 ## Version History
+
+### v1.1.2 (2026-03-08) - User Pattern Submission Interface
+- 🎯 Implemented comprehensive PatternSubmissionInterface class
+- 🖱️ Created modern UI with form validation and pattern management
+- ✅ Added real-time pattern add/delete/toggle functionality
+- 🔍 Built pattern list display with enable/disable controls
+- 🎨 Designed responsive interface with Spotify theme and backdrop blur
+- 📝 Integrated pattern submission into main extension flow
+- 📦 Increased bundle size to 98.87 KB (+18.37 KB for UI)
+- 📚 Added Pattern Manager documentation to README
+
+### v1.1.1 (2026-03-08) - Pattern Validation Framework
+- 🔍 Implemented comprehensive PatternValidator class
+- ✅ Added type-specific validation rules for audio/ui/script patterns
+- 🛡️ Enhanced pattern syntax validation and security checks
+- 📊 Created duplicate detection and effectiveness validation
+- 🔧 Built pattern sanitization and error reporting system
+- ✅ Integrated validation framework into main extension flow
+- 📦 Increased bundle size to 65.04 KB (+11.64 KB for validation)
+
+### v1.1.0 (2026-03-08) - Adaptive Pattern Storage
+- 🗄️ Implemented comprehensive PatternStorage class
+- 💾 Added localStorage-based pattern persistence
+- 🔍 Created pattern validation and management system
+- 📊 Added pattern effectiveness tracking
+- 🔄 Built import/export functionality for patterns
+- ✅ Integrated pattern storage into main extension flow
+- 📦 Increased bundle size to 53.40 KB (+3.14 KB)
 
 ### v1.0.4 (2026-03-08) - Advanced Audio Ad Blocking
 - 🔧 Enhanced audio ad script blocking

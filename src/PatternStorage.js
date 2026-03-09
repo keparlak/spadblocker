@@ -218,6 +218,13 @@ class PatternStorage {
   }
 
   /**
+   * Get all patterns (alias for getAllPatterns)
+   */
+  getPatterns() {
+    return this.getAllPatterns();
+  }
+
+  /**
    * Get patterns by type
    */
   getPatternsByType(type) {
@@ -405,6 +412,3 @@ class PatternStorage {
 }
 
 // Export for use in main extension
-if (typeof window !== 'undefined') {
-  window.SpadblockerPatternStorage = PatternStorage;
-}

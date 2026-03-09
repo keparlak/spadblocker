@@ -262,6 +262,3 @@ class ConfigValidator {
 }
 
 // Export for use in main extension
-if (typeof window !== 'undefined') {
-  window.SpadblockerConfigValidator = ConfigValidator;
-}

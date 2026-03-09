@@ -23,8 +23,12 @@ if (!fs.existsSync(DIST_DIR)) {
   fs.mkdirSync(DIST_DIR, { recursive: true });
 }
 
-// Module files in order (now just single file)
+// Module files in order of dependency
 const moduleFiles = [
+  'ConfigValidator.js',
+  'PatternStorage.js', 
+  'PatternValidator.js',
+  'PatternSubmissionInterface.js',
   'spadblocker.js'
 ];
 
@@ -48,36 +52,45 @@ function buildExtension() {
 
 `;
 
-    // Read and combine each module
+    // Read and combine each module with simple concatenation
     for (const file of moduleFiles) {
       const filePath = path.join(SRC_DIR, file);
 
       if (!fs.existsSync(filePath)) {
-        throw new Error(`Module file not found: ${file}`);
+        console.log(`⚠️  Module file not found: ${file}, skipping...`);
+        continue;
       }
 
       console.log(`📦 Adding module: ${file}`);
       const content = fs.readFileSync(filePath, 'utf8');
-
-      // Remove any existing export statements for browser compatibility
-      const browserContent = content
-        .replace(/if\s*\(\s*typeof\s+module\s*!==\s*['"]undefined['"].*?\}/gs, '')
+      
+      // Remove export statements but keep class definitions
+      const cleanedContent = content
         .replace(/module\.exports\s*=\s*[^;]+;/g, '')
         .replace(/window\.\w+\s*=\s*\w+;/g, '');
 
-      combinedContent += `${browserContent}\n\n`;
+      combinedContent += `${cleanedContent}\n\n`;
     }
 
-    // Add initialization wrapper
-    combinedContent += `
-// Auto-initialize when loaded
-if (typeof window !== 'undefined') {
+    // Wrap in IIFE and add global assignments
+    const finalContent = `(function() {
+  'use strict';
+  
+${combinedContent}
+  
+  // Make classes globally available inside IIFE
+  if (typeof window !== 'undefined') {
+    if (typeof ConfigValidator !== 'undefined') window.ConfigValidator = ConfigValidator;
+    if (typeof PatternStorage !== 'undefined') window.PatternStorage = PatternStorage;
+    if (typeof PatternValidator !== 'undefined') window.PatternValidator = PatternValidator;
+    if (typeof PatternSubmissionInterface !== 'undefined') window.PatternSubmissionInterface = PatternSubmissionInterface;
+    
     console.log('Spadblocker: Extension loaded');
-}
-`;
+  }
+})();`;
 
     // Write combined file
-    fs.writeFileSync(OUTPUT_FILE, combinedContent);
+    fs.writeFileSync(OUTPUT_FILE, finalContent);
 
     // Get file size
     const stats = fs.statSync(OUTPUT_FILE);
@@ -138,6 +151,10 @@ function createVersionInfo() {
     return false;
   }
 }
+
+/**
+ * Create minified version
+ */
 function createMinifiedVersion() {
   console.log('🗜️  Creating minified version...');
 
@@ -150,7 +167,6 @@ function createMinifiedVersion() {
       .replace(/\/\/.*$/gm, '') // Remove line comments
       .replace(/\s+/g, ' ') // Collapse whitespace
       .replace(/;\s*}/g, '}') // Remove unnecessary semicolons
-      .replace(/\s*([{}();,])\s*/g, '$1') // Remove whitespace around operators
       .trim();
 
     const minifiedFile = path.join(DIST_DIR, 'spadblocker.min.js');
@@ -195,11 +211,10 @@ function createPackage() {
 
 ## Quick Install
 
-1. Copy \`spadblocker.js\` to your Spicetify extensions folder:
+1. Copy \`spadblocker.js\` to your Spicetify Extensions folder:
 
 **Windows**: \`%appdata%\\spicetify\\Extensions\\\`
-**Linux**: \`~/.config/spicetify/Extensions/\`
-**macOS**: \`~/.config/spicetify/Extensions/\`
+**Linux/macOS**: \`~/.config/spicetify/Extensions/\`
 
 2. Run:
 \`\`\`bash
@@ -211,16 +226,25 @@ spicetify apply
 
 ## Verification
 
-Open browser console (F12) and check for:
-\`Spadblocker: Extension loaded\`
-\`Spadblocker: Successfully initialized\`
+Open Spotify's developer console (F12) and check for:
+\`\`\`
+Spadblocker: Extension loaded
+Spadblocker: Successfully initialized
+\`\`
 
 ## Troubleshooting
 
 - Ensure Spicetify is properly installed
-- Check that the file is in the correct directory
+- Check file permissions
 - Run \`spicetify apply\` again
-- Restart Spotify completely
+- Check version status with \`npm run version\`
+## Getting Help
+
+- **Console**: Check DevTools console for errors
+- **Logs**: Look for \`🚫 Spadblocker blocked\` messages
+- **Status**: Use \`window.Spadblocker?.getStatus()\` for health check
+- **Issues**: Report bugs on GitHub Issues
+- **Community**: Join Discord/Reddit communities
 
 For more help, visit: https://github.com/keparlak/spadblocker
 `;
@@ -260,10 +284,3 @@ function main() {
 if (require.main === module) {
   main();
 }
-
-module.exports = {
-  buildExtension,
-  createMinifiedVersion,
-  createPackage,
-  createVersionInfo
-};

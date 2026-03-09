@@ -459,6 +459,3 @@ class PatternValidator {
 }
 
 // Export for use in main extension
-if (typeof window !== 'undefined') {
-  window.SpadblockerPatternValidator = PatternValidator;
-}
