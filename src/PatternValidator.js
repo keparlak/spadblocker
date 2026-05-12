@@ -317,9 +317,7 @@ class PatternValidator {
       return;
     }
 
-    const duplicate = existingPatterns.find(existing =>
-      existing.id === pattern.id && existing.id !== pattern.id
-    );
+    const duplicate = existingPatterns.find(existing => existing.id === pattern.id);
 
     if (duplicate) {
       errors.push({

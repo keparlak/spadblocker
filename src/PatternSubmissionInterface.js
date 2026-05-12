@@ -9,6 +9,8 @@ class PatternSubmissionInterface {
   #isInitialized = false;
   #topbarButton = null;
   #manualButton = null;
+  #inspectorOverlay = null;
+  #inspectorHandlers = null;
 
   constructor() {
     this.#initialize();
@@ -88,71 +90,121 @@ class PatternSubmissionInterface {
     const container = document.createElement('div');
     container.id = 'spadblocker-pattern-interface';
     container.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      width: 400px;
-      max-height: 600px;
-      background: rgba(0, 0, 0, 0.95);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 12px;
-      padding: 20px;
-      color: white;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      z-index: 10000;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      overflow-y: auto;
-      display: none;
+      position: fixed !important;
+      top: 50% !important;
+      left: 50% !important;
+      transform: translate(-50%, -50%) !important;
+      width: 600px !important;
+      max-width: 90vw !important;
+      max-height: 80vh !important;
+      background: #121212 !important;
+      border: 1px solid #282828 !important;
+      border-radius: 8px !important;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
+      z-index: 999999 !important;
+      display: none !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
     `;
+    
 
     // Add header
+    const header = this.#createHeader();
+    container.appendChild(header);
+
+    return container;
+  }
+
+  /**
+   * Create header
+   */
+  #createHeader() {
     const header = document.createElement('div');
     header.style.cssText = `
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+      padding: 16px 20px !important;
+      background: #1e1e1e !important;
+      border-bottom: 1px solid #282828 !important;
     `;
 
     const title = document.createElement('h3');
     title.textContent = 'Pattern Manager';
     title.style.cssText = `
-      margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-      color: #1DB954;
+      margin: 0 !important;
+      color: #fff !important;
+      font-size: 16px !important;
+      font-weight: 600 !important;
     `;
+
+    const buttons = document.createElement('div');
+    buttons.style.cssText = `
+      display: flex !important;
+      gap: 8px !important;
+    `;
+
+    // Element Inspector button
+    const inspectorBtn = document.createElement('button');
+    inspectorBtn.textContent = '🔍 Inspect';
+    inspectorBtn.title = 'Element Inspector - Click elements to create patterns';
+    inspectorBtn.style.cssText = `
+      background: #1DB954 !important;
+      color: white !important;
+      border: none !important;
+      padding: 6px 12px !important;
+      border-radius: 4px !important;
+      cursor: pointer !important;
+      font-size: 12px !important;
+      font-weight: 500 !important;
+      transition: all 0.2s !important;
+    `;
+    
+    inspectorBtn.onmouseover = () => {
+      inspectorBtn.style.background = '#1ed760';
+    };
+    
+    inspectorBtn.onmouseout = () => {
+      inspectorBtn.style.background = '#1DB954';
+    };
+    
+    inspectorBtn.onclick = () => this.#startElementInspector();
 
     const closeBtn = document.createElement('button');
-    closeBtn.textContent = '×';
+    closeBtn.textContent = '✕';
     closeBtn.style.cssText = `
-      background: none;
-      border: none;
-      color: white;
-      font-size: 24px;
-      cursor: pointer;
-      padding: 0;
-      width: 30px;
-      height: 30px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 50%;
-      transition: background 0.2s;
+      background: none !important;
+      color: #fff !important;
+      border: none !important;
+      font-size: 20px !important;
+      cursor: pointer !important;
+      padding: 0 !important;
+      width: 24px !important;
+      height: 24px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      border-radius: 4px !important;
+      transition: background 0.2s !important;
     `;
-    closeBtn.onmouseover = () => closeBtn.style.background = 'rgba(255, 255, 255, 0.1)';
-    closeBtn.onmouseout = () => closeBtn.style.background = 'none';
+    
+    closeBtn.onmouseover = () => {
+      closeBtn.style.background = 'rgba(255, 255, 255, 0.1)';
+    };
+    
+    closeBtn.onmouseout = () => {
+      closeBtn.style.background = 'none';
+    };
+    
     closeBtn.onclick = () => this.hide();
 
+    buttons.appendChild(inspectorBtn);
+    buttons.appendChild(closeBtn);
     header.appendChild(title);
-    header.appendChild(closeBtn);
-    container.appendChild(header);
+    header.appendChild(buttons);
 
-    return container;
+    return header;
   }
 
   /**
@@ -518,10 +570,13 @@ class PatternSubmissionInterface {
       // Add pattern
       this.#storage.addPattern(pattern);
       this.#showMessage('Pattern added successfully!', 'success');
-      
+
+      // Tell the active blocker to merge this pattern into its live ruleset.
+      window.dispatchEvent(new CustomEvent('spadblocker:patterns-changed'));
+
       // Reset form
       document.getElementById('spadblocker-pattern-form').reset();
-      
+
       // Reload patterns list
       this.#loadPatternsList();
       
@@ -568,6 +623,7 @@ class PatternSubmissionInterface {
         this.#storage.updatePattern(id, updated);
         button.textContent = updated.enabled ? 'Disable' : 'Enable';
         button.style.background = updated.enabled ? '#E53935' : '#1DB954';
+        window.dispatchEvent(new CustomEvent('spadblocker:patterns-changed'));
         this.#loadPatternsList();
       }
     } catch (error) {
@@ -585,6 +641,7 @@ class PatternSubmissionInterface {
       try {
         this.#storage.removePattern(id);
         this.#showMessage('Pattern deleted successfully', 'success');
+        window.dispatchEvent(new CustomEvent('spadblocker:patterns-changed'));
         this.#loadPatternsList();
       } catch (error) {
         console.error('Spadblocker: Failed to delete pattern:', error);
@@ -644,12 +701,6 @@ class PatternSubmissionInterface {
    * Create toggle button using Spicetify Topbar API
    */
   #createToggleButton() {
-    if (!window.Spicetify || !window.Spicetify.Topbar) {
-      console.warn('Spadblocker: Spicetify Topbar not available, falling back to manual button');
-      this.#createManualButton();
-      return;
-    }
-
     try {
       // Create SVG icon for the button
       const svgIcon = `
@@ -720,8 +771,251 @@ class PatternSubmissionInterface {
   }
 
   /**
-   * Show interface
+   * Start element inspector mode
    */
+  #startElementInspector() {
+    // Hide pattern manager
+    this.hide();
+    
+    // Create inspector overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'spadblocker-inspector-overlay';
+    overlay.style.cssText = `
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      background: rgba(0, 0, 0, 0.3) !important;
+      z-index: 999999 !important;
+      cursor: crosshair !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      pointer-events: none !important;
+    `;
+    
+    // Create inspector info
+    const info = document.createElement('div');
+    info.style.cssText = `
+      position: fixed !important;
+      top: 20px !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      background: #1e1e1e !important;
+      color: white !important;
+      padding: 12px 20px !important;
+      border-radius: 8px !important;
+      font-size: 14px !important;
+      z-index: 1000000 !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+      pointer-events: auto !important;
+    `;
+    info.innerHTML = '🔍 <strong>Element Inspector</strong><br>Click any element to create a pattern<br><small>Press ESC to cancel</small>';
+    
+    overlay.appendChild(info);
+    document.body.appendChild(overlay);
+    
+    // Element hover effect
+    let highlightedElement = null;
+    
+    const highlightElement = (element) => {
+      // Remove previous highlight
+      if (highlightedElement && highlightedElement !== element) {
+        highlightedElement.style.outline = '';
+        highlightedElement.style.outlineOffset = '';
+      }
+      
+      // Add new highlight
+      if (element && element !== overlay && element !== info && element !== document.body) {
+        highlightedElement = element;
+        element.style.outline = '2px solid #1DB954';
+        element.style.outlineOffset = '2px';
+      }
+    };
+    
+    // Global mouse tracking
+    const handleMouseMove = (e) => {
+      const element = document.elementFromPoint(e.clientX, e.clientY);
+      highlightElement(element);
+    };
+    
+    const handleClick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const element = document.elementFromPoint(e.clientX, e.clientY);
+      
+      if (element && element !== overlay && element !== info && element !== document.body) {
+        this.#createPatternFromElement(element);
+        this.#stopElementInspector();
+      }
+    };
+    
+    // Add event listeners to document
+    document.addEventListener('mousemove', handleMouseMove, true);
+    document.addEventListener('click', handleClick, true);
+    
+    // Cancel on ESC
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        this.#stopElementInspector();
+      }
+    };
+    
+    document.addEventListener('keydown', handleEscape, true);
+    
+    // Store references for cleanup
+    this.#inspectorOverlay = overlay;
+    this.#inspectorHandlers = {
+      mousemove: handleMouseMove,
+      click: handleClick,
+      keydown: handleEscape
+    };
+  }
+  
+  /**
+   * Stop element inspector mode
+   */
+  #stopElementInspector() {
+    // Remove highlight from current element
+    if (this.#inspectorOverlay) {
+      const highlightedElements = document.querySelectorAll('[style*="outline: rgb(29, 185, 84)"]');
+      highlightedElements.forEach(el => {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+      });
+      
+      this.#inspectorOverlay.remove();
+      this.#inspectorOverlay = null;
+    }
+    
+    // Remove event listeners
+    if (this.#inspectorHandlers) {
+      document.removeEventListener('mousemove', this.#inspectorHandlers.mousemove, true);
+      document.removeEventListener('click', this.#inspectorHandlers.click, true);
+      document.removeEventListener('keydown', this.#inspectorHandlers.keydown, true);
+      this.#inspectorHandlers = null;
+    }
+    
+    // Show pattern manager again
+    this.show();
+  }
+  
+  /**
+   * Create pattern from element
+   */
+  #createPatternFromElement(element) {
+    const patterns = [];
+    
+    // Generate patterns from element
+    if (element.id) {
+      patterns.push(`#${element.id}`);
+    }
+    
+    if (element.className) {
+      const classes = element.className.split(' ').filter(cls => cls.trim());
+      classes.forEach(cls => {
+        patterns.push(`.${cls}`);
+        patterns.push(`[class*="${cls}"]`);
+      });
+    }
+    
+    // Generate selector patterns
+    const selector = this.#generateSelector(element);
+    if (selector) {
+      patterns.push(selector);
+    }
+    
+    // Create pattern from first valid pattern
+    if (patterns.length > 0) {
+      const pattern = patterns[0];
+      const patternId = `inspector-${Date.now()}`;
+      
+      const newPattern = {
+        id: patternId,
+        type: 'ui',
+        pattern: pattern,
+        selector: selector,
+        effectiveness: 0.8,
+        source: 'inspector',
+        enabled: true
+      };
+      
+      // Add pattern
+      if (this.#storage) {
+        const validation = this.#validator.validatePattern(newPattern);
+        if (validation.valid) {
+          this.#storage.addPattern(newPattern);
+          console.log('✅ Pattern created from element:', pattern);
+
+          window.dispatchEvent(new CustomEvent('spadblocker:patterns-changed'));
+
+          // Show notification
+          this.#showNotification(`Pattern created: ${pattern}`, 'success');
+
+          // Refresh pattern list
+          this.#loadPatternsList();
+        } else {
+          this.#showNotification(`Invalid pattern: ${validation.errors.join(', ')}`, 'error');
+        }
+      }
+    }
+  }
+  
+  /**
+   * Generate CSS selector for element
+   */
+  #generateSelector(element) {
+    if (!element) return '';
+    
+    // Try to generate a unique selector
+    if (element.id) {
+      return `#${element.id}`;
+    }
+    
+    // Use class names
+    if (element.className && typeof element.className === 'string') {
+      const classes = element.className.split(' ').filter(cls => cls.trim());
+      if (classes.length > 0) {
+        return `.${classes[0]}`;
+      }
+    }
+    
+    // Use tag name with attributes
+    const tagName = element.tagName.toLowerCase();
+    if (element.dataset.testid) {
+      return `[data-testid="${element.dataset.testid}"]`;
+    }
+    
+    return tagName;
+  }
+  
+  /**
+   * Show notification
+   */
+  #showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed !important;
+      top: 20px !important;
+      right: 20px !important;
+      background: ${type === 'success' ? '#1DB954' : type === 'error' ? '#e74c3c' : '#3498db'} !important;
+      color: white !important;
+      padding: 12px 16px !important;
+      border-radius: 6px !important;
+      font-size: 14px !important;
+      z-index: 1000001 !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+      max-width: 300px !important;
+    `;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    // Auto remove after 3 seconds
+    setTimeout(() => {
+      notification.remove();
+    }, 3000);
+  }
   show() {
     const container = document.getElementById('spadblocker-pattern-interface');
     const button = document.getElementById('spadblocker-pattern-toggle');

@@ -40,10 +40,10 @@ function buildExtension() {
 
   try {
     // Start with header comment
-    let combinedContent = `/**
+    const headerContent = `/**
  * Spadblocker - Custom Spotify Adblocker Extension
  * Eliminates ads and unlocks premium features for free users
- * 
+ *
  * @version ${VERSION}
  * @author Spadblocker Team
  * @license MIT
@@ -52,39 +52,63 @@ function buildExtension() {
 
 `;
 
-    // Read and combine each module with simple concatenation
+    // Read each module separately so we can interleave the window-exposure
+    // block between the support classes and the main extension IIFE.
+    // Previously the assignments were appended after the main IIFE — but
+    // when Spotify's document is already loaded the main IIFE runs
+    // synchronously and tries to read window.PatternStorage before the
+    // assignments execute, leaving the Pattern system uninitialised.
+    const moduleSources = {};
     for (const file of moduleFiles) {
       const filePath = path.join(SRC_DIR, file);
 
       if (!fs.existsSync(filePath)) {
         console.log(`⚠️  Module file not found: ${file}, skipping...`);
+        moduleSources[file] = '';
         continue;
       }
 
       console.log(`📦 Adding module: ${file}`);
       const content = fs.readFileSync(filePath, 'utf8');
-      
+
       // Remove export statements but keep class definitions
-      const cleanedContent = content
+      moduleSources[file] = content
         .replace(/module\.exports\s*=\s*[^;]+;/g, '')
         .replace(/window\.\w+\s*=\s*\w+;/g, '');
-
-      combinedContent += `${cleanedContent}\n\n`;
     }
 
-    // Wrap in IIFE and add global assignments
-    const finalContent = `(function() {
-  'use strict';
-  
-${combinedContent}
-  
-  // Make classes globally available inside IIFE
+    const supportClasses = [
+      'ConfigValidator.js',
+      'PatternStorage.js',
+      'PatternValidator.js',
+      'PatternSubmissionInterface.js'
+    ].map(f => moduleSources[f] || '').join('\n\n');
+
+    const exposeBlock = `
+  // Expose support classes on window BEFORE the main extension IIFE runs.
+  // Order matters: spadblocker.js (the main IIFE) reads window.PatternStorage
+  // etc. synchronously when document is already loaded.
   if (typeof window !== 'undefined') {
     if (typeof ConfigValidator !== 'undefined') window.ConfigValidator = ConfigValidator;
     if (typeof PatternStorage !== 'undefined') window.PatternStorage = PatternStorage;
     if (typeof PatternValidator !== 'undefined') window.PatternValidator = PatternValidator;
     if (typeof PatternSubmissionInterface !== 'undefined') window.PatternSubmissionInterface = PatternSubmissionInterface;
-    
+  }
+`;
+
+    const mainExtension = moduleSources['spadblocker.js'] || '';
+
+    // Wrap in IIFE — support classes first, expose globals, then main code.
+    const finalContent = `${headerContent}(function() {
+  'use strict';
+
+${supportClasses}
+
+${exposeBlock}
+
+${mainExtension}
+
+  if (typeof window !== 'undefined') {
     console.log('Spadblocker: Extension loaded');
   }
 })();`;
