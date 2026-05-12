@@ -167,11 +167,7 @@ listed under Advanced Protection.
 
 ### Documentation
 
-For detailed development information, see:
-- [Extension Development Guide](docs/EXTENSION_DEVELOPMENT.md)
-- [Spicetify Extension Development](docs/SPICETIFY_EXTENSION_DEVELOPMENT.md)
-- [Codebase Knowledge Brain Dump](codebase-analysis-docs/CODEBASE_KNOWLEDGE.md)
-- [Architecture diagrams (Mermaid)](codebase-analysis-docs/assets/architecture.md)
+Read [src/spadblocker.js](src/spadblocker.js) — the codebase is single-file and intentionally compact. Spicetify reference: <https://spicetify.app/docs/development/api-wrapper>.
 
 ### Project Structure
 
@@ -180,8 +176,8 @@ spadblocker/
 ├── src/
 │   ├── spadblocker.js          # Main runtime (IIFE) — orchestrator,
 │   │                            # AudioAdBlocker, UIAdRemover,
-│   │                            # PremiumFeatures, FallbackManager,
-│   │                            # WebpackIntegration, PerformanceMonitor
+│   │                            # PremiumFeatures, WebpackIntegration,
+│   │                            # PerformanceMonitor
 │   ├── ConfigValidator.js      # Schema-based CONFIG validator
 │   ├── PatternStorage.js       # localStorage-backed CRUD for patterns
 │   ├── PatternValidator.js     # Type-aware pattern validation
@@ -201,8 +197,7 @@ spadblocker/
 │   ├── spadblocker.min.js      # Minified
 │   ├── package/                # Installation package
 │   └── version.json            # Build metadata (version + hash)
-├── docs/                       # Hand-written developer guides
-├── codebase-analysis-docs/     # Audit & architecture notes
+├── CHANGELOG.md                # Release notes
 ├── eslint.config.js            # ESLint flat config
 ├── .prettierrc                 # Prettier config
 ├── jest.config.json            # Jest config

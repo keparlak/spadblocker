@@ -24,7 +24,6 @@ This release rewrites the blocking core to match [rxri/spicetify-extensions/adbl
 - **Pattern Manager → blocker wiring**: enabled UI patterns merge into the active CSS at boot; enabled audio/script patterns merge into `blockedScripts`. Add/delete/toggle dispatches `window:spadblocker:patterns-changed` and the blocker live-reloads.
 - **Element Inspector flow** (🔍) — already existed but is now functional and documented; UI patterns auto-generated from clicked elements (`id`, class list, `data-testid`).
 - **CHANGELOG.md** (this file). README's Version History section is trimmed to a pointer.
-- **`codebase-analysis-docs/CODEBASE_KNOWLEDGE.md`** — full self-contained reference + Mermaid architecture diagrams.
 
 ### Changed
 - **Build script ordering**: `window.{ConfigValidator,PatternStorage,PatternValidator,PatternSubmissionInterface}` assignments now run **before** the main extension IIFE. When Spotify's document is already loaded, the main IIFE runs synchronously; in the prior order it read undefined globals and the Pattern system silently failed to initialise.
@@ -34,7 +33,7 @@ This release rewrites the blocking core to match [rxri/spicetify-extensions/adbl
 - **`Spadblocker.#waitForPlatform`** waits for `Spicetify.Events.platformLoaded` and `webpackLoaded` first; the polling fallback also waits for `AdManagers` to actually populate rather than for the Spicetify globals to exist.
 - **`window.Spadblocker.version`** is now injected from `package.json` at build time via a `SPADBLOCKER_VERSION` constant. The three call sites that previously had hardcoded `'1.0.0'`/`'1.1.2'` literals now read it via typeof-guarded reference.
 - **`getStatus()` return shape**: gains `audioDiagnostics`, `spicetify`, `patternSystem`, `patternCount`; loses `fallbacks`; `config` shrinks to the seven remaining keys.
-- **README.md** restructured to reflect actual behaviour. Old "Script Blocking / Fetch Interception" claims removed; Pattern Manager Topbar button + Element Inspector documented; broken doc links repointed at `codebase-analysis-docs/`.
+- **README.md** restructured to reflect actual behaviour. Old "Script Blocking / Fetch Interception" claims removed; Pattern Manager Topbar button + Element Inspector documented; obsolete doc links removed.
 
 ### Removed
 - **`document.createElement`, `window.fetch`, `Array.prototype.push` monkey-patches** — global, irreversible, and the `Array.prototype.push` patch interfered with Spotify's auth refresh queue (root cause of the 7-8 s playback stall).
