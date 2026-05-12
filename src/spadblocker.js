@@ -19,12 +19,8 @@
     blockAudioAds: true,
     blockUIAds: true,
     enablePremiumFeatures: true,
-    hideUpgradeButtons: true,
     debugMode: false,
-    debounceMs: 300,
     maintenanceIntervalMs: 30000,
-    premiumOverrideIntervalMs: 60000,
-    useWeakRef: true,
     enablePerformanceMonitoring: true,
     maxRetries: 3,
     blockedScripts: [
@@ -84,45 +80,32 @@
     }
   }
 
-  // Simple configuration validation
+  // Run the bundled schema validator (ConfigValidator class, declared in
+  // the outer build IIFE so it is in this inner IIFE's closure). Falls
+  // back to a no-op when running outside the bundle (e.g. unit tests
+  // that load this file standalone).
   function validateConfig() {
-    const errors = [];
-    const warnings = [];
-
-    // Basic validation for key properties
-    const requiredProps = ['blockAudioAds', 'blockUIAds', 'enablePremiumFeatures'];
-    for (const prop of requiredProps) {
-      if (CONFIG[prop] !== undefined && typeof CONFIG[prop] !== 'boolean') {
-        errors.push(`${prop}: Expected boolean, got ${typeof CONFIG[prop]}`);
+    const Validator = (typeof ConfigValidator !== 'undefined')
+      ? ConfigValidator
+      : window.ConfigValidator;
+    if (!Validator) {
+      return { valid: true, errors: [], warnings: [] };
+    }
+    try {
+      const result = new Validator().validate(CONFIG);
+      if (result.errors?.length) {
+        console.error('Spadblocker: Configuration validation failed:', result.errors);
       }
-    }
-
-    // Validate numeric properties
-    if (CONFIG.maintenanceIntervalMs !== undefined) {
-      if (typeof CONFIG.maintenanceIntervalMs !== 'number' || CONFIG.maintenanceIntervalMs < 1000) {
-        errors.push(`maintenanceIntervalMs: Must be number >= 1000, got ${CONFIG.maintenanceIntervalMs}`);
+      if (result.warnings?.length) {
+        console.warn('Spadblocker: Configuration warnings:', result.warnings);
       }
+      return result;
+    } catch (error) {
+      console.error('Spadblocker: ConfigValidator threw, skipping validation', error);
+      return { valid: true, errors: [], warnings: [] };
     }
-
-    if (CONFIG.maxRetries !== undefined) {
-      if (typeof CONFIG.maxRetries !== 'number' || CONFIG.maxRetries < 1 || CONFIG.maxRetries > 10) {
-        errors.push(`maxRetries: Must be number between 1-10, got ${CONFIG.maxRetries}`);
-      }
-    }
-
-    // Log validation results
-    if (errors.length > 0) {
-      console.error('Spadblocker: Configuration validation failed:', errors);
-    }
-
-    if (warnings.length > 0) {
-      console.warn('Spadblocker: Configuration warnings:', warnings);
-    }
-
-    return { valid: errors.length === 0, errors, warnings };
   }
 
-  // Validate configuration on load
   validateConfig();
 
   /**
@@ -180,123 +163,103 @@
 
     constructor(config) {
       this.config = config || CONFIG;
-      this.waitForWebpack();
     }
 
     async waitForWebpack() {
       const MAX_RETRIES = 50;
       const RETRY_DELAY = 200;
-
       for (let i = 0; i < MAX_RETRIES; i++) {
-        // Check for multiple webpack indicators
-        if (window.webpackChunk ||
-            window.__webpack_require__ ||
-            document.querySelector('script[src*="webpack"]') ||
-            typeof window.webpackJsonp !== 'undefined') {
-          // eslint-disable-next-line no-console
-          console.log('Spadblocker: Webpack detected');
-          await this.loadModules();
+        if (Array.isArray(window.webpackChunkclient_web)) {
+          if (this.config.debugMode) {
+            console.log('Spadblocker: Webpack detected');
+          }
           return;
         }
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       }
-
-      // Don't throw error, just continue without webpack integration
       if (this.config.debugMode) {
-        // eslint-disable-next-line no-console
-        console.log('Spadblocker: Webpack not detected, continuing without webpack integration');
+        console.log('Spadblocker: webpackChunkclient_web not detected');
       }
     }
 
+    /**
+     * Same shape as rxri/adblock's loadWebpack(): push a stub chunk to
+     * recover the runtime `require`, then enumerate every module in
+     * `require.m` to surface both the cache (object modules) and a
+     * flattened list of function exports the Esperanto service lookup
+     * iterates.
+     */
     async loadModules() {
       try {
-        // Wait for webpack to be ready
-        const webpackReady = await new Promise(resolve => {
-          if (window.webpackChunk ||
-              window.__webpack_require__ ||
-              document.querySelector('script[src*="webpack"]') ||
-              typeof window.webpackJsonp !== 'undefined') {
-            // eslint-disable-next-line no-console
-            console.log('Spadblocker: Webpack detected');
-            resolve({ cache: [], functionModules: [] });
-            return;
-          }
+        await this.waitForWebpack();
+        const chunks = window.webpackChunkclient_web;
+        if (!Array.isArray(chunks) || typeof chunks.push !== 'function') {
+          return { cache: [], functionModules: [] };
+        }
 
-          const modules = this.extractModules();
-          if (modules && modules.length > 0) {
-            // eslint-disable-next-line no-console
-            console.log('Spadblocker: Webpack modules extracted');
-            resolve({ cache: [], functionModules: modules });
-            return;
-          }
+        let require;
+        try {
+          require = chunks.push([[Symbol('spadblocker')], {}, re => re]);
+        } catch (error) {
+          console.error('Spadblocker: webpackChunkclient_web.push failed', error);
+          return { cache: [], functionModules: [] };
+        }
 
-          // Continue waiting if no modules found yet
-          resolve(null);
-        });
+        if (!require?.m) {
+          return { cache: [], functionModules: [] };
+        }
 
-        const webpackResult = await webpackReady;
-        return webpackResult || { cache: [], functionModules: [] };
+        const cache = Object.keys(require.m).map(id => {
+          try { return require(id); } catch { return null; }
+        }).filter(Boolean);
+
+        const modules = cache
+          .filter(m => typeof m === 'object')
+          .flatMap(m => {
+            try { return Object.values(m); } catch { return []; }
+          });
+
+        const webpackFactories = new Set(Object.values(require.m));
+        const functionModules = modules.flatMap(m =>
+          typeof m === 'function'
+            ? [m]
+            : (typeof m === 'object' && m)
+              ? Object.values(m).filter(v => typeof v === 'function' && !webpackFactories.has(v))
+              : []
+        );
+
+        this.#cache = cache;
+        this.#functionModules = functionModules;
+        return { cache, functionModules };
       } catch (error) {
         console.error('Spadblocker: Module loading failed:', error);
         return { cache: [], functionModules: [] };
       }
     }
 
-    extractModules() {
+    /**
+     * Mirrors rxri/adblock's getSettingsClient. Prefers an already-built
+     * client found in the module cache, falls back to instantiating the
+     * Esperanto Settings service with the supplied productState transport.
+     * Accepts both current and legacy SERVICE_IDs.
+     */
+    getSettingsClient(cache, functionModules = [], transport = {}) {
       try {
-        const modules = [];
-
-        // Safely extract function modules
-        if (window.webpackChunk && typeof window.webpackChunk === 'function') {
-          try {
-            const chunk0 = window.webpackChunk(0);
-            if (chunk0 && chunk0[1]) {
-              modules.push(...chunk0[1]);
-            }
-          } catch (error) {
-            console.error('Spadblocker: Failed to extract webpack chunks:', error);
-          }
+        if (Array.isArray(cache)) {
+          const cached = cache.find(m => m?.settingsClient)?.settingsClient;
+          if (cached) return cached;
         }
-
-        // Safely extract require cache
-        if (window.__webpack_require__ && typeof window.__webpack_require__ === 'function') {
-          try {
-            const {cache} = window.__webpack_require__;
-            if (cache && typeof cache === 'object') {
-              Object.keys(cache).forEach(key => {
-                if (cache[key] && cache[key].exports) {
-                  modules.push(cache[key].exports);
-                }
-              });
-            }
-          } catch (error) {
-            console.error('Spadblocker: Failed to extract webpack cache:', error);
-          }
-        }
-
-        return modules;
-      } catch (error) {
-        console.error('Spadblocker: Module extraction failed:', error);
-        return [];
-      }
-    }
-
-    getSettingsClient(cache, functionModules) {
-      try {
         if (functionModules?.find) {
           const existingClient = functionModules.find(
             module => module?.prototype?.constructor?.name === 'AdSettingsClient'
           );
-
-          if (existingClient) {
-            return new existingClient();
-          }
+          if (existingClient) return new existingClient(transport);
 
           const SettingsService = functionModules.find(
-            module => module?.SERVICE_ID === 'spotify.ads.esperanto.settings.proto.Settings'
+            m => m?.SERVICE_ID === 'spotify.ads.esperanto.settings.proto.Settings'
+              || m?.SERVICE_ID === 'spotify.ads.esperanto.proto.Settings'
           );
-
-          return SettingsService ? new SettingsService({}) : null;
+          return SettingsService ? new SettingsService(transport) : null;
         }
         return null;
       } catch (error) {
@@ -305,22 +268,19 @@
       }
     }
 
-    getSlotsClient(functionModules) {
+    getSlotsClient(functionModules = [], transport = {}) {
       try {
         if (functionModules?.find) {
           const existingClient = functionModules.find(
             module => module?.prototype?.constructor?.name === 'AdSlotsClient'
           );
-
-          if (existingClient) {
-            return new existingClient();
-          }
+          if (existingClient) return new existingClient(transport);
 
           const SlotsService = functionModules.find(
-            module => module?.SERVICE_ID === 'spotify.ads.esperanto.slots.proto.Slots'
+            m => m?.SERVICE_ID === 'spotify.ads.esperanto.slots.proto.Slots'
+              || m?.SERVICE_ID === 'spotify.ads.esperanto.proto.Slots'
           );
-
-          return SlotsService ? new SlotsService({}) : null;
+          return SlotsService ? new SlotsService(transport) : null;
         }
         return null;
       } catch (error) {
@@ -329,14 +289,14 @@
       }
     }
 
-    getTestingClient(functionModules) {
+    getTestingClient(functionModules = [], transport = {}) {
       try {
         if (functionModules?.find) {
           const TestingService = functionModules.find(
-            module => module?.SERVICE_ID === 'spotify.ads.esperanto.testing.proto.Testing'
+            m => m?.SERVICE_ID === 'spotify.ads.esperanto.testing.proto.Testing'
+              || m?.SERVICE_ID === 'spotify.ads.esperanto.proto.Testing'
           );
-
-          return TestingService ? new TestingService({}) : null;
+          return TestingService ? new TestingService(transport) : null;
         }
         return null;
       } catch (error) {
@@ -380,8 +340,10 @@
         await this.waitForSpicetify();
 
         if (this.config.blockAudioAds) {
-          await this.setupAdClients();
+          // Resolve productState first so its transport is available to
+          // every Esperanto service client we instantiate below.
           this.#resolveProductState();
+          await this.setupAdClients();
           await this.configureAdManagers();
           await this.disableAdsViaProductState();
           this.subscribeToProductState();
@@ -478,10 +440,11 @@
       try {
         const webpack = new WebpackIntegration();
         const { cache, functionModules } = await webpack.loadModules();
+        const transport = this.productState?.transport || {};
 
-        this.settingsClient = webpack.getSettingsClient(cache, functionModules);
-        this.slotsClient = webpack.getSlotsClient(functionModules);
-        this.testingClient = webpack.getTestingClient(functionModules);
+        this.settingsClient = webpack.getSettingsClient(cache, functionModules, transport);
+        this.slotsClient = webpack.getSlotsClient(functionModules, transport);
+        this.testingClient = webpack.getTestingClient(functionModules, transport);
       } catch (error) {
         console.error('Spadblocker: Failed to setup ad clients', error);
       }
@@ -1241,156 +1204,36 @@
 
   /**
    * Premium Features
+   *
+   * Historically this class mutated Spicetify.Cosmo.ProductState directly
+   * and tickled Spicetify.Player._state to fake a premium account. Both
+   * are dead writes on modern Spotify: ProductState is sourced from the
+   * Esperanto product-state service (now overridden by
+   * AudioAdBlocker.disableAdsViaProductState via putOverridesValues), and
+   * Player._state is regenerated by Spotify's own player code.
+   *
+   * The class is intentionally kept as a no-op so the orchestrator's
+   * module lifecycle (init/destroy/status) stays unchanged. The UI side
+   * of "looks premium" is now handled by the Spicetify experimental
+   * feature flags toggled in AudioAdBlocker.enableExperimentalFeatures
+   * (hideUpgradeCTA, enablePremiumUserForMiniPlayer, etc.).
    */
   class PremiumFeatures {
     constructor(config) {
       this.config = config;
-      this.originalProductState = null;
       this.isInitialized = false;
-      this.timers = new Set();
     }
 
     async initialize() {
-      try {
-        await this.waitForSpicetify();
-
-        if (this.config.enablePremiumFeatures) {
-          this.overrideProductState();
-          this.enablePremiumFeatures();
-          this.setupPeriodicOverride();
-        }
-
-        this.isInitialized = true;
-
-        if (this.config.debugMode) {
-          // eslint-disable-next-line no-console
-          console.log('Spadblocker: Premium features initialized');
-        }
-      } catch (error) {
-        console.error('Spadblocker: Premium features initialization failed', error);
-      }
-    }
-
-    async waitForSpicetify() {
-      const MAX_RETRIES = 50;
-      const RETRY_DELAY = 100;
-
-      for (let i = 0; i < MAX_RETRIES; i++) {
-        if (window.Spicetify?.Player) {
-          return;
-        }
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      }
-
-      throw new Error('Spicetify not available after maximum retries');
-    }
-
-    #createTimer(callback, interval, isInterval = false) {
-      const timerId = isInterval ? setInterval(callback, interval) : setTimeout(callback, interval);
-      this.timers.add(timerId);
-      return timerId;
-    }
-
-    #clearAllTimers() {
-      for (const timerId of this.timers) {
-        clearTimeout(timerId);
-        clearInterval(timerId);
-      }
-      this.timers.clear();
+      this.isInitialized = true;
     }
 
     overrideProductState() {
-      try {
-        const { Cosmo } = Spicetify;
-
-        if (Cosmo?.ProductState) {
-          this.originalProductState = { ...Cosmo.ProductState };
-
-          // Override product state to premium
-          Cosmo.ProductState = {
-            ...Cosmo.ProductState,
-            ads: 0,
-            product: 'premium',
-            canPlayOnDemand: true,
-            canPlayUnlimited: true,
-            canPlayHighQuality: true,
-            canShuffle: true,
-            canRepeat: true,
-            canSeek: true,
-            canSkip: true,
-            canControlPlayback: true,
-            // Additional premium overrides
-            isPremium: true,
-            hasUnlimited: true,
-            hasNoAds: true,
-            hasNoCommercials: true,
-            adFree: true
-          };
-
-          if (this.config.debugMode) {
-            // eslint-disable-next-line no-console
-            console.log('Spadblocker: Product state overridden to premium');
-          }
-        }
-
-        // Also override global ad settings
-        if (window.Spicetify?.Platform?.AdManagers) {
-          const { AdManagers } = Spicetify.Platform;
-          Object.keys(AdManagers).forEach(key => {
-            if (AdManagers[key]?.disable) {
-              AdManagers[key].disable();
-            }
-          });
-        }
-      } catch (error) {
-        console.error('Spadblocker: Failed to override product state', error);
-      }
-    }
-
-    enablePremiumFeatures() {
-      try {
-        const { Player } = Spicetify;
-
-        if (Player) {
-          // Enable shuffle
-          if (Player._state) {
-            Player._state.shuffle = true;
-          }
-
-          // Enable repeat
-          if (Player._state) {
-            Player._state.repeat = 1;
-          }
-
-          // Enable quality
-          if (Player.setQuality) {
-            Player.setQuality('high');
-          }
-
-          if (this.config.debugMode) {
-            // eslint-disable-next-line no-console
-            console.log('Spadblocker: Premium features enabled');
-          }
-        }
-      } catch (error) {
-        console.error('Spadblocker: Failed to enable premium features', error);
-      }
-    }
-
-    setupPeriodicOverride() {
-      this.#createTimer(
-        () => {
-          this.overrideProductState();
-        },
-        this.config.premiumOverrideIntervalMs,
-        true
-      );
+      // no-op (see class jsdoc)
     }
 
     destroy() {
       this.isInitialized = false;
-      this.#clearAllTimers();
-      this.originalProductState = null;
     }
   }
 

@@ -38,13 +38,6 @@ class ConfigValidator {
       min: 1000,
       max: 300000
     },
-    premiumOverrideIntervalMs: {
-      type: 'number',
-      required: false,
-      default: 5000,
-      min: 1000,
-      max: 60000
-    },
     maxRetries: {
       type: 'number',
       required: false,
