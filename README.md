@@ -87,7 +87,7 @@ You can also check the status:
 window.Spadblocker?.getStatus()
 ```
 
-Expected response:
+Expected response (abbreviated):
 ```json
 {
   "initialized": true,
@@ -96,40 +96,72 @@ Expected response:
     "uiAdRemover": true,
     "premiumFeatures": true
   },
-  "version": "1.0.4",
+  "audioDiagnostics": {
+    "productStateOverride": true,
+    "adManagersDisabled": ["audio", "billboard", "leaderboard",
+                          "sponsoredPlaylist", "inStreamApi", "vto"],
+    "slotSubscriptions": 13,
+    "experimentalFeaturesApplied": true
+  },
+  "patternSystem": true,
+  "patternCount": 4,
   "uptime": 12345.67
 }
 ```
 
+The `audioDiagnostics` block reports whether each blocking primitive
+engaged. `productStateOverride: true` and a non-empty `adManagersDisabled`
+array are the markers that the core is working.
+
 ## Features in Detail
 
 ### Audio Ad Blocking
-- Disables Spotify's ad managers
-- Blocks Google DoubleClick and GPT scripts
-- Intercepts ad URL patterns
-- Configures ad slots to prevent ads
-- Works with both direct and fallback methods
+- Disables all six `Spicetify.Platform.AdManagers` streams Spotify exposes:
+  `audio`, `billboard`, `leaderboard`, `sponsoredPlaylist`, `inStreamApi`,
+  `vto` (plus `audio.isNewAdsNpvEnabled = false`).
+- Overrides the Esperanto product-state service via
+  `productState.putOverridesValues({ ads: "0", catalogue: "premium",
+  product: "premium", type: "premium" })` — the real API, not the
+  legacy `Cosmo.ProductState` cache.
+- Subscribes to product-state changes so the override re-applies
+  automatically whenever Spotify pushes new state.
+- Subscribes to every ad slot via
+  `audio.inStreamApi.adsCoreConnector.subscribeToSlot` and clears each
+  one as it arrives (`clearSlot`, `slotsClient.clearAllAds`,
+  `updateAdServerEndpoint("http://localhost/no/thanks")`).
 
 ### UI Ad Removal
-- Hides upgrade buttons and premium prompts
-- Removes banner advertisements
-- Blocks modal upgrade dialogs
-- Real-time DOM monitoring with MutationObserver
-- Generic pattern matching for new ad types
+- Static CSS block hides upgrade buttons, premium-promo containers,
+  podcast sponsor cards, HPTO containers, and Google ad iframes.
+- `MutationObserver` on `document.body` catches ad nodes inserted at
+  runtime; processed nodes are tracked in a `WeakSet` for free GC.
+- A second observer drops `.main-upgradeModal` / `.main-premiumModal`
+  on insertion.
+- Enabled UI patterns from the Pattern Manager are merged into the
+  CSS at boot and live-reload on add/remove via the
+  `spadblocker:patterns-changed` event.
 
 ### Premium Features
-- Enables shuffle and repeat functionality
-- Unlocks high-quality audio streaming
-- Activates queue management
-- Simulates premium product state
-- Maintains premium overrides
+The historical Premium "unlocker" path is now a no-op shell — the
+`Cosmo.ProductState` cache mutations it performed were dead writes on
+modern Spotify, and the real premium-equivalent state comes from the
+product-state override above plus the experimental feature flags
+listed under Advanced Protection.
 
 ### Advanced Protection
-- **Script Blocking**: Prevents ad script loading
-- **Fetch Interception**: Blocks ad network requests
-- **Content Filtering**: Filters ad script content
-- **Pattern Matching**: Generic class and ID patterns
-- **Dynamic Monitoring**: Real-time DOM observation
+- **Spicetify experimental flags**: at boot we toggle
+  `hideUpgradeCTA=true`, `enableInAppMessaging=false`,
+  `enablePremiumUserForMiniPlayer=true`, and
+  `enableEsperantoMigration=true` via `localStorage` and
+  `Platform.RemoteConfigDebugAPI.setOverride` so upsells and in-app
+  messages stop firing.
+- **Per-slot settings**: `settingsClient.updateSlotEnabled(false)` plus
+  ad-server URL redirected to localhost for each known slot.
+- **No DOM/network monkey-patches**: earlier versions monkey-patched
+  `document.createElement`, `window.fetch`, and
+  `Array.prototype.push`. They were removed in 1.2.0 because they
+  interfered with Spotify's own auth-token refresh queue, surfacing as
+  "Token is currently unavailable" mid-playback.
 
 ## Development
 
@@ -137,100 +169,140 @@ Expected response:
 
 For detailed development information, see:
 - [Extension Development Guide](docs/EXTENSION_DEVELOPMENT.md)
-- [API Reference](docs/API_REFERENCE.md)
-- [Architecture Overview](docs/ARCHITECTURE.md)
+- [Spicetify Extension Development](docs/SPICETIFY_EXTENSION_DEVELOPMENT.md)
+- [Codebase Knowledge Brain Dump](codebase-analysis-docs/CODEBASE_KNOWLEDGE.md)
+- [Architecture diagrams (Mermaid)](codebase-analysis-docs/assets/architecture.md)
 
 ### Project Structure
 
 ```
 spadblocker/
 ├── src/
-│   └── spadblocker.js          # Main extension file (single file architecture)
+│   ├── spadblocker.js          # Main runtime (IIFE) — orchestrator,
+│   │                            # AudioAdBlocker, UIAdRemover,
+│   │                            # PremiumFeatures, FallbackManager,
+│   │                            # WebpackIntegration, PerformanceMonitor
+│   ├── ConfigValidator.js      # Schema-based CONFIG validator
+│   ├── PatternStorage.js       # localStorage-backed CRUD for patterns
+│   ├── PatternValidator.js     # Type-aware pattern validation
+│   ├── PatternSubmissionInterface.js  # Pattern Manager DOM modal +
+│   │                                   # Element Inspector overlay
+│   ├── setupTests.js           # Jest globals + Spicetify mocks
+│   └── *.test.js               # Jest unit tests
 ├── scripts/
-│   ├── build.cjs               # Build script
-│   ├── version.cjs             # Version management
-│   └── dev.js                  # Development script
-├── dist/
+│   ├── build.cjs               # Concatenator + minifier + packager
+│   ├── version.cjs             # Show/deploy current build
+│   ├── dev.js                  # Watch + rebuild
+│   ├── test.cjs                # Syntax/structure smoke tests
+│   ├── jest-runner.cjs         # Jest wrapper
+│   └── analyze-bundle.cjs      # Bundle-size report
+├── dist/                       # Generated (gitignored)
 │   ├── spadblocker.js          # Built extension
-│   ├── spadblocker.min.js      # Minified version
+│   ├── spadblocker.min.js      # Minified
 │   ├── package/                # Installation package
-│   └── version.json           # Version information
-├── docs/                      # Documentation
-│   ├── EXTENSION_DEVELOPMENT.md
-│   ├── API_REFERENCE.md
-│   └── ARCHITECTURE.md
-├── eslint.config.js            # ESLint configuration
-├── prettierrc                  # Prettier configuration
-└── package.json               # Project metadata
+│   └── version.json            # Build metadata (version + hash)
+├── docs/                       # Hand-written developer guides
+├── codebase-analysis-docs/     # Audit & architecture notes
+├── eslint.config.js            # ESLint flat config
+├── .prettierrc                 # Prettier config
+├── jest.config.json            # Jest config
+└── package.json                # Project metadata + npm scripts
 ```
 
 ### Available Scripts
 
 ```bash
-npm run build          # Build the extension
-npm run version         # Show version information
-npm run version:deploy  # Deploy current version
-npm run dev            # Development mode with watching
-npm run test           # Run tests
-npm run lint           # Lint code
-npm run format         # Format code
-npm run size           # Analyze bundle size
-npm run install        # Install built extension
+npm run build           # Build the extension (dist/)
+npm run version         # Show current build version + hash
+npm run version:deploy  # Copy dist/package/spadblocker.js to temp/extensions/
+npm run dev             # Initial build + watch src/ and rebuild on change
+npm test                # Smoke tests (syntax + structure)
+npm run test:unit       # Jest unit tests
+npm run test:watch      # Jest watch mode
+npm run test:coverage   # Jest with coverage
+npm run lint            # ESLint over src/ and scripts/
+npm run format          # Prettier over src/ and scripts/
+npm run size            # Bundle-size report
+npm run security        # npm audit
 ```
 
 ### Architecture
 
-The extension uses a modern single-file architecture with:
+The extension is built as a single concatenated IIFE bundle. Source
+classes live in separate files under `src/` and `scripts/build.cjs`
+joins them in dependency order. Highlights:
 
-- **ES2023+ Features**: Private class fields, WeakRef, PerformanceObserver
-- **Modular Design**: Separate classes for different concerns
-- **Performance Monitoring**: Built-in timing and metrics
-- **Error Handling**: Comprehensive error catching and recovery
-- **Memory Management**: WeakRef for automatic cleanup
-- **Version System**: Automatic version tracking and deployment
+- **ES2023+ idioms**: private class fields (`#field`), `WeakSet` for
+  DOM tracking, `AbortController` for cancelable lifecycles,
+  event-driven init via `Spicetify.Events.{platformLoaded,webpackLoaded}`.
+- **rxri/adblock-aligned core**: ad blocking uses Spotify's own
+  Esperanto services (productState `putOverridesValues`, all six
+  `AdManagers`, slot subscription via `adsCoreConnector`) rather than
+  fragile DOM/network monkey-patches.
+- **Pattern Manager**: a `localStorage`-backed CRUD system with a
+  modal UI and click-to-pick Element Inspector; user patterns merge
+  into the active blocklist live.
+- **Self-instrumentation**: `window.Spadblocker.getStatus()` returns
+  the boot diagnostic so users can audit which primitives engaged.
 
 ## Configuration
 
-You can modify the behavior by editing the `CONFIG` object in `src/spadblocker.js`:
+Behaviour is controlled by the `CONFIG` object in [src/spadblocker.js](src/spadblocker.js):
 
 ```javascript
 const CONFIG = {
-  // Core features
-  blockAudioAds: true,           // Enable audio ad blocking
-  blockUIAds: true,              // Enable UI ad removal
-  enablePremiumFeatures: true,    // Enable premium features
-  hideUpgradeButtons: true,       // Hide upgrade buttons
-  
-  // Development
-  debugMode: false,               // Enable debug logging
-  
-  // Performance
-  debounceMs: 300,              // Debounce expensive operations
-  maintenanceIntervalMs: 30000,    // Maintenance interval
-  premiumOverrideIntervalMs: 60000, // Premium override interval
-  
-  // Advanced
-  useWeakRef: true,              // Use WeakRef for memory management
-  enablePerformanceMonitoring: true  // Enable performance monitoring
+  blockAudioAds: true,                // Audio ad pipeline disabled
+  blockUIAds: true,                   // CSS + MutationObserver UI cleanup
+  enablePremiumFeatures: true,        // No-op shell on modern Spotify;
+                                      //   premium-equivalent state comes
+                                      //   from the productState override
+                                      //   in AudioAdBlocker
+  debugMode: false,                   // Verbose console logs
+  maintenanceIntervalMs: 30000,       // Maintenance pass cadence (ms)
+  enablePerformanceMonitoring: true,  // Periodic getMetrics() log gate
+  maxRetries: 3                       // Per-feature retry budget
 };
 ```
+
+A schema-based validator (`ConfigValidator`) runs at boot. Unknown
+keys or out-of-range numerics surface as console warnings.
 
 ## Using the Pattern Manager
 
 ### Accessing the Interface
 
-The Pattern Manager can be accessed via the **🎯 button** in the top-right corner of Spotify. Click this button to open the pattern management interface.
+The Pattern Manager mounts a button in Spotify's top bar via
+`Spicetify.Topbar.Button` (label "Pattern Manager"). If the Topbar
+API is unavailable, a floating 🎯 button appears in the upper-right
+corner as a fallback. Either button toggles the manager modal.
 
 ### Adding New Patterns
 
-1. **Click the 🎯 button** to open the Pattern Manager
-2. **Fill in the form**:
-   - **Pattern ID**: Unique identifier (e.g., `custom-audio-ad-1`)
-   - **Type**: Choose from Audio Ad, UI Ad, or Script
-   - **Pattern**: The pattern to match (e.g., `ad-`, `.ad-container`)
-   - **CSS Selector** (UI patterns only): CSS selector to target (optional)
-   - **Effectiveness**: 0.0-1.0 rating (how well the pattern works)
-3. **Click "Add Pattern"** to submit
+You can add patterns two ways:
+
+**1) Manually via the form**
+
+1. Open the Pattern Manager
+2. Fill in:
+   - **Pattern ID**: Unique identifier (e.g. `custom-audio-ad-1`)
+   - **Type**: Audio Ad, UI Ad, or Script
+   - **Pattern**: substring (audio/script) or CSS selector (ui),
+     e.g. `ad-`, `.ad-banner`
+   - **CSS Selector** (optional, required for UI patterns)
+   - **Effectiveness**: 0.0–1.0 self-reported confidence
+3. Click **Add Pattern**
+
+**2) Visually via the Element Inspector (🔍)**
+
+1. Click the **🔍 Inspect** button in the modal header
+2. Hover any DOM element — it highlights green
+3. Click to capture it. A UI pattern is auto-generated from the
+   element's `id`, class list, or `data-testid` and added to storage
+4. Press **Esc** to cancel without picking
+
+New / toggled / deleted patterns dispatch the
+`spadblocker:patterns-changed` event so the active blocklist
+reloads without restarting Spotify.
 
 ### Managing Patterns
 

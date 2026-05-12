@@ -1204,249 +1204,17 @@
     }
   }
 
-  /**
-   * Fallback Manager
-   * Provides graceful degradation when features fail
-   */
-  class FallbackManager {
-    #fallbacks = new Map();
-    #retryAttempts = new Map();
-    #maxRetries = 3;
-
-    constructor(config) {
-      this.config = config || CONFIG;
-      this.#initializeFallbacks();
-    }
-
-    #initializeFallbacks() {
-      // Audio ad blocking fallbacks
-      this.#fallbacks.set('audioAdBlocking', {
-        primary: () => this.#enableAdvancedAudioBlocking(),
-        secondary: () => this.#enableBasicAudioBlocking(),
-        fallback: () => this.#enableCSSAudioBlocking()
-      });
-
-      // UI ad removal fallbacks
-      this.#fallbacks.set('uiAdRemoval', {
-        primary: () => this.#enableAdvancedUIRemoval(),
-        secondary: () => this.#enableBasicUIRemoval(),
-        fallback: () => this.#enableCSSOnlyRemoval()
-      });
-
-      // Premium features fallbacks
-      this.#fallbacks.set('premiumFeatures', {
-        primary: () => this.#enableAdvancedPremium(),
-        secondary: () => this.#enableBasicPremium(),
-        fallback: () => this.#enableMinimalPremium()
-      });
-
-      // Webpack integration fallbacks
-      this.#fallbacks.set('webpackIntegration', {
-        primary: () => this.#enableAdvancedWebpack(),
-        secondary: () => this.#enableBasicWebpack(),
-        fallback: () => this.#disableWebpackFeatures()
-      });
-    }
-
-    async executeFallback(featureName) {
-      const fallback = this.#fallbacks.get(featureName);
-      if (!fallback) {
-        console.warn(`Spadblocker: No fallback configured for ${featureName}`);
-        return false;
-      }
-
-      const attempts = this.#retryAttempts.get(featureName) || 0;
-
-      try {
-        // eslint-disable-next-line no-console
-        console.log(`Spadblocker: Attempting fallback for ${featureName} (attempt ${attempts + 1})`);
-
-        let result;
-        if (attempts === 0) {
-          result = await fallback.primary();
-        } else if (attempts === 1) {
-          result = await fallback.secondary();
-        } else {
-          result = await fallback.fallback();
-        }
-
-        if (result) {
-          // eslint-disable-next-line no-console
-          console.log(`Spadblocker: Fallback successful for ${featureName}`);
-          this.#retryAttempts.delete(featureName);
-          return true;
-        }
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error(`Spadblocker: Fallback failed for ${featureName}:`, error);
-      }
-
-      this.#retryAttempts.set(featureName, attempts + 1);
-
-      if (attempts >= this.#maxRetries - 1) {
-        // eslint-disable-next-line no-console
-        console.warn(`Spadblocker: All fallbacks exhausted for ${featureName}`);
-        this.#retryAttempts.delete(featureName);
-        return false;
-      }
-
-      // Retry with next fallback level
-      return await this.executeFallback(featureName);
-    }
-
-    #enableAdvancedAudioBlocking() {
-      // Full script interception and fetch blocking
-      return true;
-    }
-
-    #enableBasicAudioBlocking() {
-      // Basic script blocking only
-      return true;
-    }
-
-    #enableCSSAudioBlocking() {
-      try {
-        // CSS-only ad hiding
-        const style = document.createElement('style');
-        style.textContent = `
-          [data-ad-type="audio"], 
-          .ad-audio, 
-          .audio-ad { 
-            display: none !important; 
-          }
-        `;
-        document.head.appendChild(style);
-        return true;
-      } catch (error) {
-        throw new Error('CSS audio blocking failed');
-      }
-    }
-
-    #enableAdvancedUIRemoval() {
-      // MutationObserver + advanced selectors
-      return true;
-    }
-
-    #enableBasicUIRemoval() {
-      try {
-        // Basic CSS injection only
-        const style = document.createElement('style');
-        style.textContent = `
-          .ad-container,
-          .ad-banner,
-          .ad-overlay { 
-            display: none !important; 
-          }
-        `;
-        document.head.appendChild(style);
-        return true;
-      } catch (error) {
-        throw new Error('Basic UI removal failed');
-      }
-    }
-
-    #enableCSSOnlyRemoval() {
-      try {
-        // Minimal CSS hiding
-        const style = document.createElement('style');
-        style.textContent = `
-          .ad { 
-            display: none !important; 
-          }
-        `;
-        document.head.appendChild(style);
-        return true;
-      } catch (error) {
-        throw new Error('CSS-only removal failed');
-      }
-    }
-
-    #enableAdvancedPremium() {
-      // Full product state override + feature enabling
-      return true;
-    }
-
-    #enableBasicPremium() {
-      try {
-        // Basic product state override only
-        if (window.Spicetify?.Cosmo?.ProductState) {
-          window.Spicetify.Cosmo.ProductState.ads = 0;
-          window.Spicetify.Cosmo.ProductState.product = 'premium';
-        }
-        return true;
-      } catch (error) {
-        throw new Error('Basic premium features failed');
-      }
-    }
-
-    #enableMinimalPremium() {
-      try {
-        // Minimal CSS-only premium appearance
-        const style = document.createElement('style');
-        style.textContent = `
-          .premium-lock,
-          .upgrade-button { 
-            display: none !important; 
-          }
-        `;
-        document.head.appendChild(style);
-        return true;
-      } catch (error) {
-        throw new Error('Minimal premium features failed');
-      }
-    }
-
-    #enableAdvancedWebpack() {
-      // Full webpack integration
-      return true;
-    }
-
-    #enableBasicWebpack() {
-      // Basic webpack detection only
-      return true;
-    }
-
-    #disableWebpackFeatures() {
-      try {
-        // Disable all webpack-dependent features
-        // eslint-disable-next-line no-console
-        console.warn('Spadblocker: Webpack features disabled due to repeated failures');
-        return true;
-      } catch (error) {
-        throw new Error('Webpack disable failed');
-      }
-    }
-
-    getFallbackStatus() {
-      const status = {};
-      for (const [feature, attempts] of this.#retryAttempts) {
-        status[feature] = {
-          attempts,
-          remaining: Math.max(0, this.#maxRetries - attempts)
-        };
-      }
-      return status;
-    }
-
-    resetFallbacks() {
-      this.#retryAttempts.clear();
-      // eslint-disable-next-line no-console
-      console.log('Spadblocker: All fallback attempts reset');
-    }
-  }
   class Spadblocker {
     #audioAdBlocker = null;
     #uiAdRemover = null;
     #premiumFeatures = null;
     #performanceMonitor = new PerformanceMonitor();
-    #fallbackManager = null;
     #isInitialized = false;
     #timers = new Set();
     #abortController = null;
 
     constructor() {
       this.#performanceMonitor.startTimer('initialization');
-      this.#fallbackManager = new FallbackManager(CONFIG);
     }
 
     async initialize() {
@@ -1517,53 +1285,29 @@
       const modules = [];
       const errors = [];
 
+      const tryInit = async (label, factory) => {
+        try {
+          const instance = factory();
+          await instance.initialize();
+          modules.push(label);
+          return instance;
+        } catch (error) {
+          errors.push(`${label}: ${error.message}`);
+          return null;
+        }
+      };
+
       if (CONFIG.blockAudioAds) {
-        try {
-          this.#audioAdBlocker = new AudioAdBlocker(CONFIG);
-          await this.#audioAdBlocker.initialize();
-          modules.push('AudioAdBlocker');
-        } catch (error) {
-          errors.push(`AudioAdBlocker: ${error.message}`);
-          // Attempt fallback
-          const fallbackSuccess = await this.#fallbackManager.executeFallback('audioAdBlocking');
-          if (fallbackSuccess) {
-            modules.push('AudioAdBlocker (fallback)');
-          }
-        }
+        this.#audioAdBlocker = await tryInit('AudioAdBlocker', () => new AudioAdBlocker(CONFIG));
       }
-
       if (CONFIG.blockUIAds) {
-        try {
-          this.#uiAdRemover = new UIAdRemover(CONFIG);
-          await this.#uiAdRemover.initialize();
-          modules.push('UIAdRemover');
-        } catch (error) {
-          errors.push(`UIAdRemover: ${error.message}`);
-          // Attempt fallback
-          const fallbackSuccess = await this.#fallbackManager.executeFallback('uiAdRemoval');
-          if (fallbackSuccess) {
-            modules.push('UIAdRemover (fallback)');
-          }
-        }
+        this.#uiAdRemover = await tryInit('UIAdRemover', () => new UIAdRemover(CONFIG));
       }
-
       if (CONFIG.enablePremiumFeatures) {
-        try {
-          this.#premiumFeatures = new PremiumFeatures(CONFIG);
-          await this.#premiumFeatures.initialize();
-          modules.push('PremiumFeatures');
-        } catch (error) {
-          errors.push(`PremiumFeatures: ${error.message}`);
-          // Attempt fallback
-          const fallbackSuccess = await this.#fallbackManager.executeFallback('premiumFeatures');
-          if (fallbackSuccess) {
-            modules.push('PremiumFeatures (fallback)');
-          }
-        }
+        this.#premiumFeatures = await tryInit('PremiumFeatures', () => new PremiumFeatures(CONFIG));
       }
 
       if (errors.length > 0 && modules.length === 0) {
-        // All modules failed and fallbacks exhausted
         throw new Error(`All module initialization failed: ${errors.join(', ')}`);
       }
 
@@ -1588,8 +1332,7 @@
         },
         audioDiagnostics: this.#audioAdBlocker?.diagnostics || null,
         patternSystem: !!window.SpadblockerPatternSystem,
-        patternCount: window.SpadblockerPatternSystem?.storage?.getAllPatterns?.()?.length ?? 0,
-        fallbacks: this.#fallbackManager.getFallbackStatus()
+        patternCount: window.SpadblockerPatternSystem?.storage?.getAllPatterns?.()?.length ?? 0
       });
     }
 
@@ -1692,8 +1435,7 @@
         patternSystem: !!window.SpadblockerPatternSystem,
         patternCount: window.SpadblockerPatternSystem?.storage?.getAllPatterns?.()?.length ?? 0,
         config: CONFIG,
-        uptime: this.#performanceMonitor.getMetrics().uptime,
-        fallbacks: this.#fallbackManager.getFallbackStatus()
+        uptime: this.#performanceMonitor.getMetrics().uptime
       };
     }
 
@@ -1708,7 +1450,6 @@
       this.#audioAdBlocker?.destroy();
       this.#uiAdRemover?.destroy();
       this.#premiumFeatures?.destroy();
-      this.#fallbackManager?.resetFallbacks();
 
       document.removeEventListener('visibilitychange', this.handleVisibilityChange);
       window.removeEventListener('beforeunload', this.handlePageUnload);
