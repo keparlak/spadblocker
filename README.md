@@ -356,67 +356,11 @@ The Pattern Manager shows all existing patterns with:
 
 ## Version History
 
-### v1.1.2 (2026-03-08) - User Pattern Submission Interface
-- 🎯 Implemented comprehensive PatternSubmissionInterface class
-- 🖱️ Created modern UI with form validation and pattern management
-- ✅ Added real-time pattern add/delete/toggle functionality
-- 🔍 Built pattern list display with enable/disable controls
-- 🎨 Designed responsive interface with Spotify theme and backdrop blur
-- 📝 Integrated pattern submission into main extension flow
-- 📦 Increased bundle size to 98.87 KB (+18.37 KB for UI)
-- 📚 Added Pattern Manager documentation to README
+Full release notes live in [CHANGELOG.md](CHANGELOG.md).
 
-### v1.1.1 (2026-03-08) - Pattern Validation Framework
-- 🔍 Implemented comprehensive PatternValidator class
-- ✅ Added type-specific validation rules for audio/ui/script patterns
-- 🛡️ Enhanced pattern syntax validation and security checks
-- 📊 Created duplicate detection and effectiveness validation
-- 🔧 Built pattern sanitization and error reporting system
-- ✅ Integrated validation framework into main extension flow
-- 📦 Increased bundle size to 65.04 KB (+11.64 KB for validation)
-
-### v1.1.0 (2026-03-08) - Adaptive Pattern Storage
-- 🗄️ Implemented comprehensive PatternStorage class
-- 💾 Added localStorage-based pattern persistence
-- 🔍 Created pattern validation and management system
-- 📊 Added pattern effectiveness tracking
-- 🔄 Built import/export functionality for patterns
-- ✅ Integrated pattern storage into main extension flow
-- 📦 Increased bundle size to 53.40 KB (+3.14 KB)
-
-### v1.0.4 (2026-03-08) - Advanced Audio Ad Blocking
-- 🔧 Enhanced audio ad script blocking
-- 🛡️ Added script content filtering
-- 🚫 Improved fetch request blocking
-- 📊 Enhanced performance monitoring
-
-### v1.0.3 (2026-03-08) - Generic Banner Ad Blocking
-- 🎯 Added generic class pattern matching
-- 📝 Enhanced CSS selectors
-- 🔍 Improved pattern detection
-- 🚀 Fixed double initialization
-
-### v1.0.2 (2026-03-08) - Double Loading Fix
-- 🔧 Fixed double initialization issue
-- 🛡️ Added initialization guard
-- 📊 Improved error handling
-- 🚀 Enhanced startup performance
-
-### v1.0.1 (2026-03-08) - Enhanced Ad Blocking
-- 🎯 Added Google DoubleClick/GPT blocking
-- 🖼️ Added HPTO ad container blocking
-- 🛡️ Enhanced script blocking
-- 📦 Improved CSS selectors
-
-### v1.0.0 (2026-03-07) - Initial Release
-- ✨ Initial release with modern ES2023+ architecture
-- 🎵 Audio ad blocking functionality
-- 🖼️ UI ad removal with real-time monitoring
-- ⭐ Premium features unlocking
-- 🚀 Single-file architecture for easy maintenance
-- 📊 Performance monitoring and metrics
-- 🧹 Comprehensive error handling
-- 📦 Version management system
+Latest: **1.2.0** — rxri/adblock-aligned core (real `productState` override,
+6 AdManagers, slot subscription, experimental flags). Removes the
+DOM/network monkey-patches that previously broke Spotify's auth refresh.
 
 ## Troubleshooting
 
