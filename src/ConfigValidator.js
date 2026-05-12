@@ -44,29 +44,6 @@ class ConfigValidator {
       default: 3,
       min: 1,
       max: 10
-    },
-    blockedScripts: {
-      type: 'array',
-      required: false,
-      default: [
-        'ad-',
-        'ads',
-        'advertisement',
-        'doubleclick',
-        'google_ad',
-        'googlesyndication'
-      ],
-      validate: (value) => {
-        return Array.isArray(value) && value.every(item => typeof item === 'string');
-      }
-    },
-    adSelectors: {
-      type: 'array',
-      required: false,
-      default: [],
-      validate: (value) => {
-        return Array.isArray(value) && value.every(item => typeof item === 'string');
-      }
     }
   };
 

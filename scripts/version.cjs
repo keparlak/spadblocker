@@ -36,10 +36,12 @@ function showVersionInfo() {
       console.log(`📊 File Size: ${fileSizeKB} KB`);
     }
 
-    console.log('\n📜 Changelog:');
-    versionInfo.changelog.forEach((entry, index) => {
-      console.log(`  ${index + 1}. ${entry}`);
-    });
+    if (Array.isArray(versionInfo.changelog) && versionInfo.changelog.length > 0) {
+      console.log('\n📜 Changelog:');
+      versionInfo.changelog.forEach((entry, index) => {
+        console.log(`  ${index + 1}. ${entry}`);
+      });
+    }
 
     // Check if deployed
     const deployedVersion = getCurrentDeployedVersion();

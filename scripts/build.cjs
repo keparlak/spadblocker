@@ -85,6 +85,11 @@ function buildExtension() {
     ].map(f => moduleSources[f] || '').join('\n\n');
 
     const exposeBlock = `
+  // Bundle-injected version constant. Source files reference SPADBLOCKER_VERSION
+  // instead of a hardcoded literal so the public API stays in sync with
+  // package.json across builds.
+  const SPADBLOCKER_VERSION = ${JSON.stringify(VERSION)};
+
   // Expose support classes on window BEFORE the main extension IIFE runs.
   // Order matters: spadblocker.js (the main IIFE) reads window.PatternStorage
   // etc. synchronously when document is already loaded.
@@ -140,6 +145,9 @@ function createVersionInfo() {
   console.log('📝 Creating version information...');
 
   try {
+    // Note: changelog is intentionally NOT embedded here. The previous
+    // hardcoded array froze at v1.0.3 and drifted from the README. Single
+    // source of truth lives in README.md "## Version History".
     const versionInfo = {
       version: VERSION,
       buildTime: new Date().toISOString(),
@@ -153,13 +161,7 @@ function createVersionInfo() {
         main: 'spadblocker.js',
         minified: 'spadblocker.min.js',
         package: 'package/'
-      },
-      changelog: [
-        'v1.0.0 - Initial release with comprehensive ad blocking',
-        'v1.0.1 - Enhanced Google DoubleClick/GPT blocking',
-        'v1.0.2 - Added HPTO and advanced ad container blocking',
-        'v1.0.3 - Improved script blocking and premium features'
-      ]
+      }
     };
 
     fs.writeFileSync(VERSION_FILE, JSON.stringify(versionInfo, null, 2));

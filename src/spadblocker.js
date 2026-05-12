@@ -22,40 +22,7 @@
     debugMode: false,
     maintenanceIntervalMs: 30000,
     enablePerformanceMonitoring: true,
-    maxRetries: 3,
-    blockedScripts: [
-      'ad-',
-      'ads',
-      'advertisement',
-      'doubleclick',
-      'google_ad',
-      'googlesyndication'
-    ],
-    adSelectors: [
-      '[data-ad-type]',
-      '.ad-container',
-      '.ad-banner',
-      '.ad-overlay',
-      '.google-ad',
-      '.doubleclick',
-      '.hpto-ad',
-      '.sponsored-',
-      '[class*="ad-"]',
-      '[class*="ads-"]',
-      '[class*="advertisement"]',
-      '[id*="ad-"]',
-      '[id*="ads-"]',
-      '[id*="advertisement"]',
-      '[data-ad]',
-      '[data-ads]',
-      '[data-advertisement]',
-      'iframe[src*="ad"]',
-      'iframe[src*="doubleclick"]',
-      'iframe[src*="google"]',
-      'script[src*="ad"]',
-      'script[src*="doubleclick"]',
-      'script[src*="google"]'
-    ]
+    maxRetries: 3
   };
 
   // Initialize pattern management system
@@ -1498,7 +1465,7 @@
           getStatus: () => this.getStatus(),
           getMetrics: () => this.#performanceMonitor.getMetrics(),
           // No direct access to internal components or webpack
-          version: '1.0.0',
+          version: (typeof SPADBLOCKER_VERSION !== 'undefined') ? SPADBLOCKER_VERSION : '0.0.0',
           isHealthy: () => this.#isInitialized && !document.hidden,
           // Read-only configuration
           config: Object.freeze({ ...CONFIG })
@@ -1605,7 +1572,7 @@
       const Platform = window.Spicetify?.Platform;
       const adMgr = Platform?.AdManagers || {};
       console.log('Spadblocker[boot]', {
-        version: '1.1.2',
+        version: (typeof SPADBLOCKER_VERSION !== 'undefined') ? SPADBLOCKER_VERSION : '0.0.0',
         modules,
         errors,
         spicetify: {
@@ -1798,7 +1765,7 @@
         window.Spadblocker = {
           error: true,
           message: error.message,
-          version: '1.0.0',
+          version: (typeof SPADBLOCKER_VERSION !== 'undefined') ? SPADBLOCKER_VERSION : '0.0.0',
           isHealthy: () => false
         };
       }
